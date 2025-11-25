@@ -1,8 +1,9 @@
 import uuid
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import os
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from datetime import datetime
-from schemas import DocumentResponse, DocumentStatus
-from services import ocr_service, storage_service
+from .schemas import DocumentResponse, DocumentStatus
+from .services import ocr_service, storage_service, process_document_logic
 
 app = FastAPI(title = "Invoice Processor API")
 
@@ -26,9 +27,10 @@ async def upload_document(file: UploadFile = File(...)):
 
     # 3. Process the document
     try:
-        extraction_result = await ocr_service.extract_text(content)
-        staus = DocumentStatus.PROCESSED
+        extraction_result = await ocr_service.extract_text(content, file.content_type)
+        status = DocumentStatus.PROCESSED
     except Exception as e:
+        print(f"An error occurred during document processing: {e}")
         extraction_result = {"extracted_text": None, "confidence_score": None}
         status = DocumentStatus.FAILED
 
