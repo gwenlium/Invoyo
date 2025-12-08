@@ -2,7 +2,7 @@
 import uuid
 import logging
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -74,6 +74,7 @@ async def health_check():
 )
 @limiter.limit("10/minute")  # 10 uploads per minute
 async def upload_document(
+    request: Request,  # ← required for SlowAPI
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -215,6 +216,7 @@ async def get_document(
 )
 @limiter.limit("30/minute")
 async def list_documents(
+    request: Request,              # ← add this
     skip: int = 0,
     limit: int = 10,
     status_filter: str = None,
