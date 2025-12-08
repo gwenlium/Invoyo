@@ -7,6 +7,8 @@ import { switchMap, takeUntil, catchError, debounceTime, distinctUntilChanged } 
 import { DocumentService } from '../../services/document.service';
 import { DocumentItem } from '../../models/document.model';
 
+type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'uploaded' | 'processed';
+
 @Component({
   selector: 'app-invoice-list',
   templateUrl: './invoice-list.component.html',
@@ -35,7 +37,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   // Filter state
-  activeTab = signal<'active' | 'archive'>('active');
+  activeTab = signal<'unpaid' | 'paid' | 'archived'>('unpaid');
+  
+  // Sorting state
+  sortColumn = signal<string>('uploaded');
+  sortDirection = signal<'asc' | 'desc'>('desc');
 
   private pollingTimer: any;
 
@@ -83,7 +89,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     });
   }
 
-  setTab(tab: 'active' | 'archive'): void {
+  setTab(tab: 'unpaid' | 'paid' | 'archived'): void {
     this.activeTab.set(tab);
     this.manualRefresh();
   }
@@ -93,14 +99,103 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return this.documentService.list(0, 100, undefined, this.searchQuery());
   }
 
+  sortBy(column: string) {
+    if (this.sortColumn() === column) {
+      this.sortDirection.update(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sortColumn.set(column);
+      this.sortDirection.set('asc');
+    }
+  }
+
   get filteredDocuments() {
     const tab = this.activeTab();
-    return this.documents().filter(doc => {
-      if (tab === 'active') {
+    const sortCol = this.sortColumn();
+    const sortDir = this.sortDirection();
+    
+    let docs = this.documents().filter(doc => {
+      // 1. Tab Filter
+      if (tab === 'unpaid') {
         return ['pending', 'processing', 'processed', 'failed'].includes(doc.status);
-      } else {
-        return ['paid', 'archived'].includes(doc.status);
+      } else if (tab === 'paid') {
+        return doc.status === 'paid';
+      } else if (tab === 'archived') {
+        return doc.status === 'archived';
       }
+      return false;
+    });
+
+    // 2. Sorting
+    return docs.sort((a, b) => {
+      let valA: any = '';
+      let valB: any = '';
+
+      switch (sortCol) {
+        case 'filename':
+          valA = a.filename.toLowerCase();
+          valB = b.filename.toLowerCase();
+          break;
+        case 'state':
+          valA = a.status;
+          valB = b.status;
+          break;
+        case 'date':
+          // Parse DD.MM.YYYY or fallback
+          valA = this.parseDate(this.deriveInvoiceDate(a));
+          valB = this.parseDate(this.deriveInvoiceDate(b));
+          break;
+        case 'amount':
+          // Parse amount string to number
+          valA = this.parseAmount(this.deriveAmount(a));
+          valB = this.parseAmount(this.deriveAmount(b));
+          break;
+        case 'status':
+          valA = this.derivePaidStatus(a);
+          valB = this.derivePaidStatus(b);
+          break;
+        case 'uploaded':
+          valA = new Date(a.uploaded_at).getTime();
+          valB = new Date(b.uploaded_at).getTime();
+          break;
+        case 'processed':
+          valA = a.processed_at ? new Date(a.processed_at).getTime() : 0;
+          valB = b.processed_at ? new Date(b.processed_at).getTime() : 0;
+          break;
+      }
+
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  private parseDate(dateStr: string): number {
+    if (!dateStr || dateStr === '—') return 0;
+    // Expect DD.MM.YYYY
+    const parts = dateStr.split('.');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+    }
+    return 0;
+  }
+
+  private parseAmount(amountStr: string): number {
+    if (!amountStr || amountStr === '—') return 0;
+    // Remove ' or other separators, replace , with . if needed
+    // Swiss format often 1'234.50 or 1 234.50
+    const clean = amountStr.replace(/'/g, '').replace(/ /g, '');
+    return parseFloat(clean) || 0;
+  }
+
+  deleteDocument(doc: DocumentItem, event: Event) {
+    event.stopPropagation();
+    if (!confirm(`Are you sure you want to delete ${doc.filename}?`)) return;
+    
+    this.documentService.delete(doc.id).subscribe({
+      next: () => {
+        this.documents.update(docs => docs.filter(d => d.id !== doc.id));
+      },
+      error: (err) => alert('Failed to delete document')
     });
   }
 
@@ -205,6 +300,16 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     });
   }
 
+  archiveDocument(doc: DocumentItem, event: Event): void {
+    event.stopPropagation();
+    this.documentService.update(doc.id, { status: 'archived' }).subscribe({
+      next: (updatedDoc) => {
+        this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+      },
+      error: (err) => console.error('Failed to archive document', err)
+    });
+  }
+
   viewPdf(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
     if (doc.status !== 'processed') return;
@@ -229,11 +334,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   statusClass(status: DocumentItem['status']): string {
     switch (status) {
       case 'paid':
-        return 'status-ok'; // Re-use ok or create new class
+        return 'status-paid';
       case 'archived':
-        return 'status-ok';
+        return 'status-archived';
       case 'processed':
-        return 'status-ok';
+        return 'status-saved';
       case 'processing':
         return 'status-processing';
       case 'pending':
@@ -244,14 +349,43 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     }
   }
 
+  statusLabel(status: DocumentItem['status']): string {
+    if (status === 'processed') return 'Saved';
+    if (status === 'paid') return 'Paid';
+    if (status === 'archived') return 'Archived';
+    return status;
+  }
+
   deriveInvoiceDate(doc: DocumentItem): string {
-    if (doc.confirmed_due_date) return doc.confirmed_due_date; // Keeping the field name for now to avoid DB migration
-    if (doc.derived_due) return doc.derived_due;
-    const text = doc.extracted_text || '';
-    // Look for Rechnungsdatum, Datum, Date, or just a date pattern near keywords
-    // Supports DD.MM.YYYY or YYYY-MM-DD
-    const match = text.match(/(?:Rechnungsdatum|Datum|Date)\s*[:\-]?\s*((?:\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{2,4})|(?:\d{4}[.\/\-]\d{1,2}[.\/\-]\d{1,2}))/i);
-    return match ? match[1] : '—';
+    let dateStr = doc.confirmed_due_date || doc.derived_due;
+    
+    if (!dateStr) {
+      const text = doc.extracted_text || '';
+      // Look for Rechnungsdatum, Datum, Date, or just a date pattern near keywords
+      // Supports DD.MM.YYYY or YYYY-MM-DD
+      const match = text.match(/(?:Rechnungsdatum|Datum|Date)\s*[:\-]?\s*((?:\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{2,4})|(?:\d{4}[.\/\-]\d{1,2}[.\/\-]\d{1,2}))/i);
+      if (match) dateStr = match[1];
+    }
+
+    if (!dateStr) return '—';
+
+    // Normalize to DD.MM.YYYY
+    // Handle YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split('-');
+      return `${d}.${m}.${y}`;
+    }
+    // Handle YYYY.MM.DD
+    if (/^\d{4}\.\d{2}\.\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split('.');
+      return `${d}.${m}.${y}`;
+    }
+    // Handle DD/MM/YYYY or DD-MM-YYYY -> DD.MM.YYYY
+    if (/^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$/.test(dateStr)) {
+      return dateStr.replace(/[/\-]/g, '.');
+    }
+
+    return dateStr;
   }
 
   deriveAmount(doc: DocumentItem): string {
@@ -269,5 +403,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (text.includes('bezahlt') || text.includes('paid')) return 'Paid';
     if (doc.status === 'processed') return 'Unpaid';
     return 'Pending';
+  }
+
+  showUnpaidLabel(doc: DocumentItem): boolean {
+    return doc.status === 'processed' && this.derivePaidStatus(doc) === 'Unpaid';
   }
 }

@@ -4,8 +4,9 @@
       <p class="eyebrow">Realtime feed</p>
       <h2>Documents</h2>
       <div class="tabs">
-        <button class="tab" [class.active]="activeTab() === 'active'" (click)="setTab('active')">Active</button>
-        <button class="tab" [class.active]="activeTab() === 'archive'" (click)="setTab('archive')">Archive</button>
+        <button class="tab" [class.active]="activeTab() === 'unpaid'" (click)="setTab('unpaid')">Unpaid</button>
+        <button class="tab" [class.active]="activeTab() === 'paid'" (click)="setTab('paid')">Paid</button>
+        <button class="tab" [class.active]="activeTab() === 'archived'" (click)="setTab('archived')">Archived</button>
       </div>
     </div>
     <div class="actions">
@@ -33,13 +34,12 @@
     <table class="invoice-table" *ngIf="!loading() && filteredDocuments.length">
       <thead>
         <tr>
-          <th>File</th>
-          <th>State</th>
-          <th>Date</th>
-          <th>Amount</th>
-          <th>Status</th>
-          <th>Uploaded</th>
-          <th>Processed</th>
+          <th (click)="sortBy('filename')">File <span class="sort-icon" *ngIf="sortColumn() === 'filename'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th (click)="sortBy('state')">Status <span class="sort-icon" *ngIf="sortColumn() === 'state'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th (click)="sortBy('date')">Date <span class="sort-icon" *ngIf="sortColumn() === 'date'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th (click)="sortBy('amount')">Amount <span class="sort-icon" *ngIf="sortColumn() === 'amount'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th (click)="sortBy('uploaded')">Uploaded <span class="sort-icon" *ngIf="sortColumn() === 'uploaded'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th (click)="sortBy('processed')">Processed <span class="sort-icon" *ngIf="sortColumn() === 'processed'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
         </tr>
       </thead>
       <tbody>
@@ -50,16 +50,18 @@
               {{ doc.filename }}
             </td>
             <td>
-              <span class="status" [ngClass]="statusClass(doc.status)">{{ doc.status }}</span>
+              <div class="status-container">
+                <span class="status" [ngClass]="statusClass(doc.status)">{{ statusLabel(doc.status) }}</span>
+                <span *ngIf="showUnpaidLabel(doc)" class="status-unpaid">Unpaid</span>
+              </div>
             </td>
             <td>{{ deriveInvoiceDate(doc) }}</td>
             <td>{{ deriveAmount(doc) }}</td>
-            <td>{{ derivePaidStatus(doc) }}</td>
-            <td>{{ doc.uploaded_at | date:'short' }}</td>
-            <td>{{ doc.processed_at ? (doc.processed_at | date:'short') : '—' }}</td>
+            <td>{{ doc.uploaded_at | date:'dd.MM.yyyy HH:mm' }}</td>
+            <td>{{ doc.processed_at ? (doc.processed_at | date:'dd.MM.yyyy HH:mm') : '—' }}</td>
           </tr>
           <tr *ngIf="expandedDocId() === doc.id" class="detail-row">
-            <td colspan="7">
+            <td colspan="6">
               <div class="detail-content">
                 <div class="detail-header">
                   <h3>{{ doc.filename }}</h3>
@@ -67,6 +69,8 @@
                     <button *ngIf="editingDocId() !== doc.id" class="ghost small" (click)="startEdit(doc, $event)">Edit Details</button>
                     <button class="ghost small" (click)="viewPdf(doc, $event)">View Original PDF</button>
                     <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
+                    <button *ngIf="doc.status === 'paid'" class="btn-blue small" (click)="archiveDocument(doc, $event)">Archive</button>
+                    <button class="danger small" (click)="deleteDocument(doc, $event)">Delete</button>
                   </div>
                 </div>
                 

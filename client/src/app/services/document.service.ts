@@ -38,4 +38,8 @@ export class DocumentService {
       responseType: 'blob',
     });
   }
+
+  delete(documentId: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${documentId}`);
+  }
 }
