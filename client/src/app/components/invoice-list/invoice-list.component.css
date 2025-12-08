@@ -1,0 +1,54 @@
+.invoice-list-container {
+  animation: fadeIn 1s ease-in;
+}
+
+.invoice-table-container {
+  background-color: var(--container-background);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.invoice-table th, .invoice-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.invoice-table th {
+  font-weight: 500;
+  color: var(--primary-dark);
+}
+
+.invoice-row {
+  transition: background-color 0.3s ease;
+}
+
+.invoice-row:hover {
+  background-color: var(--primary-light);
+}
+
+.status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: white;
+}
+
+.status-paid {
+  background-color: var(--primary-color);
+}
+
+.status-pending {
+  background-color: #FFA000; /* Amber */
+}
+
+.status-overdue {
+  background-color: #D32F2F; /* Red */
+}

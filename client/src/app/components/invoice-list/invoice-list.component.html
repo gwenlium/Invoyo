@@ -1,0 +1,27 @@
+<div class="invoice-list-container">
+  <h2>Invoices</h2>
+  <div class="invoice-table-container">
+    <table class="invoice-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Vendor</th>
+          <th>Amount</th>
+          <th>Due Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let invoice of invoices" class="invoice-row">
+          <td>{{ invoice.id }}</td>
+          <td>{{ invoice.vendor_name }}</td>
+          <td>{{ invoice.amount | currency }}</td>
+          <td>{{ invoice.due_date | date }}</td>
+          <td>
+            <span class="status" [ngClass]="'status-' + invoice.status.toLowerCase()">{{ invoice.status }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

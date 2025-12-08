@@ -1,23 +1,27 @@
 # Invoice Processor
 
-A production-ready FastAPI service for secure document upload, OCR text extraction, and processing with PostgreSQL persistence, JWT authentication, and comprehensive error handling.
+A production-ready FastAPI and Angular application for secure document upload, OCR text extraction, and processing with PostgreSQL persistence, JWT authentication, and a modern frontend.
 
 ## 🎯 Project Highlights
 
 This project demonstrates:
 
-- **Security**: JWT authentication, rate limiting, input validation (OWASP Top 10)
-- **Architecture**: Clean 3-layer design (API → Services → Models), dependency injection
-- **Database**: PostgreSQL with SQLAlchemy ORM, proper connection pooling, migrations ready
-- **Error Handling**: Structured logging, audit trails, graceful error recovery
-- **Testing**: Integration tests with fixtures, database mocking, auth testing
-- **DevOps**: Docker Compose with health checks, environment config, scalable design
-- **Code Quality**: Type hints, docstrings, proper validation, separation of concerns
+- **Full-Stack Application**: A complete solution with a Python/FastAPI backend and an Angular frontend.
+- **Security**: JWT authentication, rate limiting, input validation (OWASP Top 10).
+- **Architecture**: Clean 3-layer design (API → Services → Models) on the backend, and a component-based architecture on the frontend.
+- **Database**: PostgreSQL with SQLAlchemy ORM, proper connection pooling.
+- **Frontend**: A modern, minimalist, and responsive UI built with Angular, featuring a green theme and animations.
+- **Error Handling**: Structured logging, audit trails, graceful error recovery.
+- **Testing**: Integration tests for the backend.
+- **DevOps**: Docker Compose for easy setup and deployment of both backend and frontend services.
+- **Code Quality**: Type hints, docstrings, proper validation, separation of concerns.
 
 ## 🏗️ Architecture
 
 ```
-Client Requests
+Angular Client (Browser)
+     ↓
+NGINX (serves static files, proxies API requests)
      ↓
 FastAPI API Layer (main.py)
   - Request validation
@@ -37,56 +41,91 @@ Data Layer
 ## 📋 Stack
 
 - **Backend**: FastAPI + Uvicorn
+- **Frontend**: Angular, TypeScript
 - **Database**: PostgreSQL 15 (SQLAlchemy ORM)
 - **Authentication**: JWT with bcrypt password hashing
 - **Security**: Rate limiting (slowapi), OWASP compliance
 - **Logging**: Structured JSON logs with audit trails
 - **Testing**: pytest + TestClient
 - **Containerization**: Docker & Docker Compose
-- **Optional**: Redis (caching, Celery tasks)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose
-- Python 3.11+ (for local development)
-- PostgreSQL 15+ (if running locally)
 
 ### With Docker (Recommended)
 
-```bash
-# 1. Clone and setup
-git clone <repo>
-cd invoiceprocessor
-cp example.env .env
+1.  **Clone and setup**
+    ```bash
+    git clone <repo>
+    cd invoiceprocessor
+    cp example.env .env
+    ```
 
-# 2. Start containers
-docker compose up --build
+2.  **Start containers**
+    ```bash
+    docker compose up --build
+    ```
 
-# 3. Access API
-open http://localhost:8000/docs  # Interactive API docs
-```
+3.  **Access the application**
+    - **Frontend**: Open your browser to `http://localhost:4200`
+    - **Backend API Docs**: Open `http://localhost:8000/docs`
 
-### Local Development
+## Frontend Development
 
-```bash
-# 1. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+The Angular client is located in the `client` directory.
 
-# 2. Install dependencies
-pip install -r requirements.txt
+### To run the frontend locally for development:
 
-# 3. Setup database
-export DATABASE_URL="postgresql://user:password@localhost:5432/invoiceprocessor"
-python -c "from app.database import init_db; init_db()"
+1.  **Navigate to the client directory**
+    ```bash
+    cd client
+    ```
 
-# 4. Run server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+2.  **Install dependencies**
+    ```bash
+    npm install
+    ```
 
-# 5. Run tests
-pytest tests/ -v
-```
+3.  **Run the development server**
+    ```bash
+    npm start
+    ```
+    The application will be available at `http://localhost:4200`. The `proxy.conf.json` is configured to forward API requests to the backend running on `http://localhost:8000`.
+
+## Backend Development
+
+The FastAPI backend is in the `app` directory.
+
+### To run the backend locally for development:
+
+1.  **Create a virtual environment**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # Windows: venv\Scripts\activate
+    ```
+
+2.  **Install dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  **Setup database**
+    ```bash
+    export DATABASE_URL="postgresql://user:password@localhost:5432/invoiceprocessor"
+    python -c "from app.database import init_db; init_db()"
+    ```
+
+4.  **Run the server**
+    ```bash
+    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    ```
+
+5.  **Run tests**
+    ```bash
+    pytest tests/ -v
+    ```
 
 ## 📚 API Documentation
 
@@ -94,7 +133,7 @@ Interactive API docs available at `http://localhost:8000/docs`
 
 ### Authentication
 
-All endpoints (except `/health` and `/auth/token`) require JWT bearer token.
+All endpoints (except `/health` and `/auth/token`) require a JWT bearer token.
 
 ```bash
 # Get access token
