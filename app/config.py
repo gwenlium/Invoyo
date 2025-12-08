@@ -1,6 +1,7 @@
 """Application configuration using environment variables."""
 import os
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from functools import lru_cache
 
 class Settings(BaseSettings):
@@ -12,7 +13,10 @@ class Settings(BaseSettings):
     api_version: str = "v1"
     
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/invoiceprocessor"
+    database_url: str = Field(
+        default="postgresql://user:password@db:5432/invoiceprocessor",
+        env="DATABASE_URL",
+    )
     database_pool_size: int = 10
     database_pool_timeout: int = 30
     database_pool_recycle: int = 3600

@@ -2,7 +2,7 @@
 
 A production-ready FastAPI service for secure document upload, OCR text extraction, and processing with PostgreSQL persistence, JWT authentication, and comprehensive error handling.
 
-## 🎯 Project Highlights (for interview)
+## 🎯 Project Highlights
 
 This project demonstrates:
 
