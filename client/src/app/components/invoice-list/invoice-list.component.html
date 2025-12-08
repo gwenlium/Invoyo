@@ -1,0 +1,111 @@
+<div class="invoice-list-container">
+  <div class="header-row">
+    <div>
+      <p class="eyebrow">Realtime feed</p>
+      <h2>Documents</h2>
+      <div class="tabs">
+        <button class="tab" [class.active]="activeTab() === 'active'" (click)="setTab('active')">Active</button>
+        <button class="tab" [class.active]="activeTab() === 'archive'" (click)="setTab('archive')">Archive</button>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="upload-section">
+        <label class="upload-btn" [class.disabled]="isUploading()">
+          <input type="file" accept="application/pdf,image/png,image/jpeg" (change)="onFileSelected($event)" [disabled]="isUploading()" />
+          <span *ngIf="!isUploading()">+ Upload New</span>
+          <span *ngIf="isUploading()">Uploading {{ uploadProgress() }}%</span>
+        </label>
+        <span class="upload-success" *ngIf="uploadMessage()">{{ uploadMessage() }}</span>
+      </div>
+
+      <div class="search-box">
+        <input type="text" placeholder="Search documents..." (input)="onSearch($event)" class="search-input">
+      </div>
+      <button class="ghost" (click)="manualRefresh()">Refresh now</button>
+      <span class="timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'shortTime' }}</span>
+    </div>
+  </div>
+
+  <div class="invoice-table-container">
+    <div *ngIf="loading()" class="inline-note">Loading documents…</div>
+    <div *ngIf="error()" class="inline-error">{{ error() }}</div>
+
+    <table class="invoice-table" *ngIf="!loading() && filteredDocuments.length">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>State</th>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Uploaded</th>
+          <th>Processed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <ng-container *ngFor="let doc of filteredDocuments">
+          <tr class="invoice-row" (click)="toggleRow(doc)" [class.expanded]="expandedDocId() === doc.id">
+            <td>
+              <span class="chevron" [class.rotated]="expandedDocId() === doc.id">▶</span>
+              {{ doc.filename }}
+            </td>
+            <td>
+              <span class="status" [ngClass]="statusClass(doc.status)">{{ doc.status }}</span>
+            </td>
+            <td>{{ deriveInvoiceDate(doc) }}</td>
+            <td>{{ deriveAmount(doc) }}</td>
+            <td>{{ derivePaidStatus(doc) }}</td>
+            <td>{{ doc.uploaded_at | date:'short' }}</td>
+            <td>{{ doc.processed_at ? (doc.processed_at | date:'short') : '—' }}</td>
+          </tr>
+          <tr *ngIf="expandedDocId() === doc.id" class="detail-row">
+            <td colspan="7">
+              <div class="detail-content">
+                <div class="detail-header">
+                  <h3>{{ doc.filename }}</h3>
+                  <div class="detail-actions">
+                    <button *ngIf="editingDocId() !== doc.id" class="ghost small" (click)="startEdit(doc, $event)">Edit Details</button>
+                    <button class="ghost small" (click)="viewPdf(doc, $event)">View Original PDF</button>
+                    <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
+                  </div>
+                </div>
+                
+                <div *ngIf="editingDocId() === doc.id" class="edit-form">
+                  <div class="form-group">
+                    <label>Invoice Date</label>
+                    <input [(ngModel)]="editForm().date" placeholder="DD.MM.YYYY">
+                  </div>
+                  <div class="form-group">
+                    <label>Amount</label>
+                    <input [(ngModel)]="editForm().amount" placeholder="0.00">
+                  </div>
+                  <div class="edit-actions">
+                    <button class="primary small" (click)="saveEdit(doc, $event)">Save</button>
+                    <button class="ghost small" (click)="cancelEdit($event)">Cancel</button>
+                  </div>
+                </div>
+
+                <div class="extracted-section" *ngIf="doc.qr_code_data">
+                  <h4>QR Code</h4>
+                  <div class="qr-container">
+                    <img *ngIf="doc.qr_code_base64" [src]="'data:image/png;base64,' + doc.qr_code_base64" class="qr-image" alt="Extracted QR Code">
+                    <pre class="text-preview qr-data">{{ doc.qr_code_data }}</pre>
+                  </div>
+                </div>
+
+                <div class="extracted-section">
+                  <h4>Extracted Text</h4>
+                  <pre class="text-preview">{{ doc.extracted_text || 'No text extracted.' }}</pre>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+
+    <div *ngIf="!loading() && !filteredDocuments.length && !error()" class="inline-note">
+      No documents found in {{ activeTab() }} tab.
+    </div>
+  </div>
+</div>

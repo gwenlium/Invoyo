@@ -1,0 +1,21 @@
+<div class="header">
+  <nav>
+    <a routerLink="/" class="logo">Invoice Storer</a>
+    <ul class="nav-links">
+      <li>
+        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Documents</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+
+<main class="main-content">
+  <div class="container">
+    <router-outlet></router-outlet>
+  </div>
+</main>
+
+<footer class="footer">
+  <p>&copy; 2025 Invoice Storer</p>
+</footer>
+      Made by Gwendolyn (●'◡'●)

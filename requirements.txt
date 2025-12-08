@@ -16,3 +16,5 @@ redis==5.0.1
 celery==5.3.4
 structlog==23.2.0
 python-json-logger==2.0.7
+opencv-python-headless==4.8.1.78
+numpy==1.26.2

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Create database engine with connection pooling
+# Create engine
 engine = create_engine(
     settings.database_url,
     pool_size=settings.database_pool_size,
@@ -18,11 +18,11 @@ engine = create_engine(
     echo=settings.environment == "development",  # Log SQL in dev
 )
 
-# Create session factory
+# Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db() -> Session:
-    """Dependency injection for database sessions."""
+    """Database session dependency."""
     db = SessionLocal()
     try:
         yield db

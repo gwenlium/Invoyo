@@ -49,8 +49,7 @@ def log_audit_event(
     """Log security-relevant events for audit trail."""
     logger = structlog.get_logger()
     logger.info(
-        "audit_event",
-        event=event,
+        event,
         user_id=user_id,
         resource_id=resource_id,
         action=action,

@@ -1,0 +1,21 @@
+<div class="upload-card">
+  <div class="header">
+    <h2>Upload Invoice / Document</h2>
+    <p>PDF, PNG, JPG up to 50MB. OCR extraction runs automatically.</p>
+  </div>
+
+  <label class="upload-label">
+    <input type="file" accept="application/pdf,image/png,image/jpeg" (change)="onFileSelected($event)" />
+    <span>Select file</span>
+  </label>
+
+  <div class="file-name" *ngIf="fileName()">{{ fileName() }}</div>
+
+  <div class="progress" *ngIf="isUploading()">
+    <div class="bar" [style.width.%]="progress()"></div>
+    <span>{{ progress() }}%</span>
+  </div>
+
+  <p class="success" *ngIf="message()">{{ message() }}</p>
+  <p class="error" *ngIf="error()">{{ error() }}</p>
+</div>

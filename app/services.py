@@ -2,6 +2,11 @@
 import asyncio
 import logging
 import fitz  # PyMuPDF
+import os
+import cv2
+import numpy as np
+import base64
+from pathlib import Path
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from .models import Document, DocumentStatus
@@ -9,38 +14,79 @@ from .models import Document, DocumentStatus
 logger = logging.getLogger(__name__)
 
 class OCRService:
-    """Extracts text from documents using PyMuPDF."""
+    """Extracts text and QR codes from documents."""
     
     async def extract_text(self, file_content: bytes, content_type: str) -> Dict:
         """
-        Extracts text from PDF or image files.
-        Runs blocking I/O in thread pool to prevent event loop blocking.
+        Extracts text and QR codes from PDF or image files.
         """
         if content_type not in ["application/pdf", "image/png", "image/jpeg"]:
             raise ValueError(f"Unsupported content type: {content_type}")
         
         # Run blocking I/O in thread pool
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._extract_sync, file_content)
+        return await loop.run_in_executor(None, self._extract_sync, file_content, content_type)
 
-    def _extract_sync(self, file_content: bytes) -> Dict:
-        """Synchronous text extraction (blocking operation)."""
+    def _extract_sync(self, file_content: bytes, content_type: str) -> Dict:
+        """Synchronous text and QR extraction."""
         try:
-            # Open PDF from in-memory byte stream
-            pdf_document = fitz.open(stream=file_content, filetype="pdf")
-            
-            text = ""
-            for page_num in range(len(pdf_document)):
-                page = pdf_document.load_page(page_num)
-                text += page.get_text()
-            
-            pdf_document.close()
+            # Map mime type to fitz filetype
+            filetype = "pdf"
+            if content_type == "image/png":
+                filetype = "png"
+            elif content_type == "image/jpeg":
+                filetype = "jpeg"
 
-            logger.info(f"Successfully extracted text from PDF ({len(text)} chars)")
+            text = ""
+            qr_codes = []
+            qr_code_base64 = None
+            
+            # Open document from in-memory byte stream
+            with fitz.open(stream=file_content, filetype=filetype) as doc:
+                for page in doc:
+                    # Extract text
+                    text += page.get_text()
+                    
+                    # Extract QR codes
+                    # Render page to image (pixmap)
+                    pix = page.get_pixmap(dpi=150) # 150 DPI is usually enough for QR
+                    
+                    # Convert to numpy array for OpenCV
+                    # pix.samples is a bytes object
+                    img_data = np.frombuffer(pix.samples, dtype=np.uint8)
+                    
+                    # Reshape based on channels
+                    if pix.n == 4: # RGBA
+                        img_data = img_data.reshape(pix.h, pix.w, 4)
+                        img_data = cv2.cvtColor(img_data, cv2.COLOR_RGBA2BGR)
+                    elif pix.n == 3: # RGB
+                        img_data = img_data.reshape(pix.h, pix.w, 3)
+                        img_data = cv2.cvtColor(img_data, cv2.COLOR_RGB2BGR)
+                    elif pix.n == 1: # Gray
+                        img_data = img_data.reshape(pix.h, pix.w)
+                        img_data = cv2.cvtColor(img_data, cv2.COLOR_GRAY2BGR)
+                    
+                    # Detect QR code
+                    detector = cv2.QRCodeDetector()
+                    data, bbox, rectified_image = detector.detectAndDecode(img_data)
+                    if data:
+                        qr_codes.append(data)
+                        # If we haven't captured a QR image yet, capture this one
+                        if qr_code_base64 is None and rectified_image is not None and rectified_image.size > 0:
+                            try:
+                                # Encode to PNG
+                                _, buffer = cv2.imencode('.png', rectified_image)
+                                qr_code_base64 = base64.b64encode(buffer).decode('utf-8')
+                            except Exception as e:
+                                logger.warning(f"Failed to encode QR image: {e}")
+
+            logger.info(f"Successfully extracted text ({len(text)} chars) and {len(qr_codes)} QR codes")
             
             return {
                 "extracted_text": text,
-                "confidence_score": 1.0  # PyMuPDF doesn't provide confidence
+                "qr_code_data": "\n".join(qr_codes) if qr_codes else None,
+                "qr_code_base64": qr_code_base64,
+                "confidence_score": 1.0
             }
         except Exception as e:
             logger.error(f"OCR extraction failed: {e}", exc_info=True)
@@ -82,6 +128,8 @@ class DocumentService:
         doc_id: str,
         status: DocumentStatus,
         extracted_text: Optional[str] = None,
+        qr_code_data: Optional[str] = None,
+        qr_code_base64: Optional[str] = None,
         confidence_score: Optional[float] = None,
         error_message: Optional[str] = None
     ) -> Document:
@@ -92,6 +140,8 @@ class DocumentService:
         
         document.status = status
         document.extracted_text = extracted_text
+        document.qr_code_data = qr_code_data
+        document.qr_code_base64 = qr_code_base64
         document.confidence_score = confidence_score
         document.error_message = error_message
         
@@ -104,27 +154,56 @@ class DocumentService:
         logger.info(f"Updated document {doc_id} to status: {status}")
         return document
 
+    @staticmethod
+    def update_document_metadata(
+        db: Session,
+        doc_id: str,
+        updates: Dict
+    ) -> Document:
+        """Update document metadata (manual overrides)."""
+        document = db.query(Document).filter(Document.id == doc_id).first()
+        if not document:
+            raise ValueError(f"Document {doc_id} not found")
+        
+        for key, value in updates.items():
+            if hasattr(document, key):
+                setattr(document, key, value)
+        
+        db.commit()
+        db.refresh(document)
+        logger.info(f"Updated document metadata for {doc_id}")
+        return document
+
 class FileStorageService:
-    """Handle file storage operations (mock for demo)."""
+    """Handle file storage operations using local filesystem."""
     
     def __init__(self):
-        self._storage = {}
-        logger.info("FileStorageService initialized (in-memory)")
+        # Store files in app/data/storage
+        self.storage_dir = Path(__file__).parent / "data" / "storage"
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"FileStorageService initialized at {self.storage_dir}")
 
     def save(self, file_id: str, content: bytes) -> str:
         """Save file and return storage path."""
-        self._storage[file_id] = content
+        file_path = self.storage_dir / file_id
+        with open(file_path, "wb") as f:
+            f.write(content)
         logger.info(f"Stored file: {file_id} ({len(content)} bytes)")
-        return f"storage/{file_id}"
+        return str(file_path)
 
     def get(self, file_id: str) -> Optional[bytes]:
         """Retrieve file from storage."""
-        return self._storage.get(file_id)
+        file_path = self.storage_dir / file_id
+        if file_path.exists():
+            with open(file_path, "rb") as f:
+                return f.read()
+        return None
     
     def delete(self, file_id: str) -> bool:
         """Delete file from storage."""
-        if file_id in self._storage:
-            del self._storage[file_id]
+        file_path = self.storage_dir / file_id
+        if file_path.exists():
+            os.remove(file_path)
             logger.info(f"Deleted file: {file_id}")
             return True
         return False
@@ -156,6 +235,8 @@ async def process_document_logic(
             file_id,
             DocumentStatus.PROCESSED,
             extracted_text=extraction_result["extracted_text"],
+            qr_code_data=extraction_result["qr_code_data"],
+            qr_code_base64=extraction_result.get("qr_code_base64"),
             confidence_score=extraction_result["confidence_score"]
         )
         

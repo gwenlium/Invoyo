@@ -11,26 +11,21 @@ from .config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Password hashing context (OWASP compliant)
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12  # Higher rounds = slower but more secure
-)
+# OWASP compliant password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 security = HTTPBearer()
 
-def hash_password(password: str) -> str:
-    """Hash password using bcrypt."""
-    return pwd_context.hash(password)
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def verify_password(plain_password, hashed_password):
     """Verify password against hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def get_password_hash(password):
+    """Hash a password."""
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Create JWT access token."""
-    settings = get_settings()
     to_encode = data.copy()
     
     if expires_delta:
