@@ -1,27 +1,43 @@
 <div class="invoice-list-container">
-  <h2>Invoices</h2>
+  <div class="header-row">
+    <div>
+      <p class="eyebrow">Realtime feed</p>
+      <h2>Documents</h2>
+      <p class="muted">Refreshes every 5s; click refresh for immediate update.</p>
+    </div>
+    <div class="actions">
+      <button class="ghost" (click)="manualRefresh()">Refresh now</button>
+      <span class="timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'shortTime' }}</span>
+    </div>
+  </div>
+
   <div class="invoice-table-container">
-    <table class="invoice-table">
+    <div *ngIf="loading()" class="inline-note">Loading documents…</div>
+    <div *ngIf="error()" class="inline-error">{{ error() }}</div>
+
+    <table class="invoice-table" *ngIf="!loading() && documents().length">
       <thead>
         <tr>
-          <th>ID</th>
-          <th>Vendor</th>
-          <th>Amount</th>
-          <th>Due Date</th>
+          <th>File</th>
           <th>Status</th>
+          <th>Uploaded</th>
+          <th>Processed</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let invoice of invoices" class="invoice-row">
-          <td>{{ invoice.id }}</td>
-          <td>{{ invoice.vendor_name }}</td>
-          <td>{{ invoice.amount | currency }}</td>
-          <td>{{ invoice.due_date | date }}</td>
+        <tr *ngFor="let doc of documents()" class="invoice-row">
+          <td>{{ doc.filename }}</td>
           <td>
-            <span class="status" [ngClass]="'status-' + invoice.status.toLowerCase()">{{ invoice.status }}</span>
+            <span class="status" [ngClass]="statusClass(doc.status)">{{ doc.status }}</span>
           </td>
+          <td>{{ doc.uploaded_at | date:'short' }}</td>
+          <td>{{ doc.processed_at ? (doc.processed_at | date:'short') : '—' }}</td>
         </tr>
       </tbody>
     </table>
+
+    <div *ngIf="!loading() && !documents().length && !error()" class="inline-note">
+      No documents yet — upload one to get started.
+    </div>
   </div>
 </div>

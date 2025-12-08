@@ -2,6 +2,53 @@
   animation: fadeIn 1s ease-in;
 }
 
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.35rem;
+}
+
+.muted {
+  color: var(--text-secondary);
+  margin: 0.15rem 0 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--divider-color);
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: border-color 0.2s ease, transform 0.15s ease;
+}
+
+.ghost:hover {
+  border-color: var(--accent-color);
+  transform: translateY(-1px);
+}
+
+.timestamp {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
 .invoice-table-container {
   background-color: var(--container-background);
   border-radius: 8px;
@@ -41,14 +88,16 @@
   color: white;
 }
 
-.status-paid {
-  background-color: var(--primary-color);
+.status-ok { background-color: var(--primary-color); }
+.status-processing { background-color: #ffa000; }
+.status-pending { background-color: #90a4ae; }
+.status-failed { background-color: #d32f2f; }
+
+.inline-note {
+  color: var(--text-secondary);
 }
 
-.status-pending {
-  background-color: #FFA000; /* Amber */
-}
-
-.status-overdue {
-  background-color: #D32F2F; /* Red */
+.inline-error {
+  color: #d32f2f;
+  font-weight: 500;
 }
