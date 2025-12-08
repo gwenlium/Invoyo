@@ -306,60 +306,6 @@ CELERY_BROKER_URL=redis://localhost:6379/1
 
 Copy `example.env` to `.env` and customize for your environment.
 
-## 🎓 Interview Talking Points
-
-### Architecture & Design
-- **Why 3-layer architecture?** Separation of concerns, testability, scalability
-- **Why SQLAlchemy?** Type-safe queries, migrations, relationship management
-- **Error handling strategy**: Catch at each layer, log with context, return safe errors to client
-
-### Scalability
-- **Load balancing**: Stateless API design, database connection pooling
-- **Background jobs**: Ready for Celery + Redis (workers scale independently)
-- **Database**: Indexes on common queries, connection pooling prevents saturation
-- **Caching**: Redis integration for frequently accessed documents
-
-### Security
-- **JWT vs Session**: JWT is stateless, better for distributed systems
-- **Password hashing**: bcrypt prevents rainbow table attacks
-- **Rate limiting**: Prevents brute force, DoS attacks
-- **Audit logging**: Compliance, forensics, anomaly detection
-
-### Production Improvements
-1. **Replace file storage**: S3/Azure Blob for production persistence
-2. **Add background workers**: Celery for long-running OCR jobs
-3. **Implement caching**: Redis for frequently accessed documents
-4. **Multi-tenancy**: Namespace databases, add org/team concepts
-5. **Monitoring**: Prometheus metrics, APM integration
-6. **CI/CD**: GitHub Actions for testing, Docker registry push
-7. **Load testing**: Locust/k6 to validate performance
-
-### Trade-offs Explained
-- **In-memory storage**: Demo simplicity vs. production persistence
-- **Synchronous OCR**: Blocking calls vs. async background jobs
-- **Single database**: Simplicity vs. eventual sharding for scale
-
-## 📖 Code Examples for Interview
-
-### Example 1: File Upload with Validation
-See `app/main.py` → `upload_document()` for:
-- Input validation (file type, size)
-- Error handling with specific HTTP codes
-- Audit logging for security events
-- Dependency injection (auth, database)
-
-### Example 2: Database Operations
-See `app/services.py` → `DocumentService` for:
-- CRUD operations with SQLAlchemy
-- Transaction management
-- Error propagation
-- Logging at service layer
-
-### Example 3: Security
-See `app/security.py` for:
-- JWT token creation/validation
-- Password hashing with bcrypt
-- Protected route dependencies
 
 ## 🛠️ Development Workflow
 
@@ -389,14 +335,14 @@ docker exec invoiceprocessor-api python -m app.database init_db
 
 ## 📝 License
 
-Confidential - Docpier Interview Demo
+Confidential - Docpier Interview Demo, nothing much else
 
 ## 🤝 Contact
 
-For questions: [your email]
+For questions: ural.erkut1@gmail.com
 
 ---
 
-**Built with ❤️ for the Docpier Senior Backend Engineer role**
+**Built with 💚 for the Docpier Senior Backend Engineer role**
 
 
