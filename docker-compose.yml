@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+  # Web API
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: invoiceprocessor-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: invoiceprocessor-db
+    environment:
+      POSTGRES_DB: invoiceprocessor
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d invoiceprocessor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis - for caching and task queues
+  redis:
+    image: redis:7-alpine
+    container_name: invoiceprocessor-redis
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
