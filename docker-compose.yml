@@ -14,6 +14,8 @@ services:
     depends_on:
       - db
       - redis
+    volumes:
+      - invoice_storage:/code/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -70,6 +72,7 @@ services:
 
 volumes:
   postgres_data:
+  invoice_storage:
 
 networks:
   app-network:

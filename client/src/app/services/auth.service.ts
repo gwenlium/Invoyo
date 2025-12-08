@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { tap } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 
 interface TokenResponse {
   access_token: string;
@@ -33,6 +34,17 @@ export class AuthService {
 
   getToken() {
     return this.token();
+  }
+
+  /** Ensure token exists; fetch demo token if missing. */
+  async ensureDemoToken(): Promise<void> {
+    // Refresh token on load.
+    try {
+      await firstValueFrom(this.login('demo', 'demo'));
+    } catch (e) {
+      // Swallow to avoid blocking app if demo auth fails.
+      console.error('Auto-auth failed', e);
+    }
   }
 
   private getStoredToken(): string | null {

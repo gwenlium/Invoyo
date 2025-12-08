@@ -33,6 +33,13 @@
   margin-bottom: 2rem;
 }
 
+.cta-row {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .cta-button {
   background-color: var(--accent-color);
   color: white;
@@ -46,5 +53,20 @@
 
 .cta-button:hover {
   background-color: #7cb342; /* Darker accent */
+  transform: translateY(-2px);
+}
+
+.ghost-btn {
+  background: transparent;
+  color: var(--primary-dark);
+  border: 1px solid var(--divider-color);
+  padding: 1rem 1.6rem;
+  border-radius: 25px;
+  cursor: pointer;
+  transition: border-color 0.3s ease, transform 0.2s ease;
+}
+
+.ghost-btn:hover {
+  border-color: var(--accent-color);
   transform: translateY(-2px);
 }

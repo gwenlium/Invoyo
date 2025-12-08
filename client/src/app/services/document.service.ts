@@ -9,14 +9,19 @@ export class DocumentService {
 
   constructor(private http: HttpClient) {}
 
-  list(skip = 0, limit = 20, statusFilter?: string): Observable<DocumentListResponse> {
+  list(skip = 0, limit = 20, statusFilter?: string, searchQuery?: string): Observable<DocumentListResponse> {
     let params = new HttpParams().set('skip', skip).set('limit', limit);
     if (statusFilter) params = params.set('status_filter', statusFilter);
+    if (searchQuery) params = params.set('search_query', searchQuery);
     return this.http.get<DocumentListResponse>(`${this.baseUrl}/`, { params });
   }
 
   get(documentId: string): Observable<DocumentItem> {
     return this.http.get<DocumentItem>(`${this.baseUrl}/${documentId}`);
+  }
+
+  update(documentId: string, updates: Partial<DocumentItem>): Observable<DocumentItem> {
+    return this.http.patch<DocumentItem>(`${this.baseUrl}/${documentId}`, updates);
   }
 
   upload(file: File): Observable<HttpEvent<DocumentItem>> {
@@ -25,6 +30,12 @@ export class DocumentService {
     return this.http.post<DocumentItem>(`${this.baseUrl}/`, form, {
       reportProgress: true,
       observe: 'events',
+    });
+  }
+
+  download(documentId: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/${documentId}/download`, {
+      responseType: 'blob',
     });
   }
 }
