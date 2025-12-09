@@ -99,7 +99,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     'total due',
     'net total',
     'brutto',
-    'netto'
+    'netto',
+    'montant',
+    'importo',
+    'solde'
   ];
 
   private readonly supportedCurrencies = new Set([
@@ -199,8 +202,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           this.lastUpdated.set(new Date());
         }
 
-        // Poll only if active work exists.
-        const hasActiveWork = resp.items.some(d => ['pending', 'processing'].includes(d.status));
+        // Poll if active work exists (pending/processing) or if we have saved docs that might be getting processed
+        const hasActiveWork = resp.items.some(d => 
+          ['pending', 'processing'].includes(d.status) || 
+          (d.status === 'saved' && (!d.extracted_text || d.extracted_text.trim().length === 0))
+        );
         
         if (hasActiveWork) {
           this.pollingTimer = setTimeout(() => this.startPolling(), 2000);
@@ -505,7 +511,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     const updates = {
       confirmed_due_date: this.editForm().date,
       confirmed_amount: this.editForm().amount,
-      processed_at: new Date().toISOString()
+      processed_at: this.formatLocalDateTime(new Date())
     };
     
     this.documentService.update(doc.id, updates).subscribe({
@@ -658,6 +664,18 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return status;
   }
 
+  formatLocalDateTime(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const ms = String(date.getMilliseconds()).padStart(3, '0');
+    
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}`;
+  }
+
   deriveInvoiceDate(doc: DocumentItem): string {
     const confirmed = this.normalizeDate(doc.confirmed_due_date);
     if (confirmed) return confirmed;
@@ -694,29 +712,85 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (!text) return '—';
 
     const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const candidates: Array<{ value: number; currency?: string; weight: number }> = [];
+    const candidates: Array<{ value: number; currency?: string; weight: number; confidence: number }> = [];
 
-    for (const line of lines) {
+    // Priority 1: Search for lines with strong amount keywords (and next line if amount not on same line)
+    const strongKeywords = ['total', 'montant', 'betrag', 'amount due', 'due', 'rechnungsbetrag'];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       if (!line) continue;
-      const matches = this.extractAmountsFromLine(line);
-      if (!matches.length) continue;
-
       const normalized = this.stripDiacritics(line).toLowerCase();
-      const hasKeyword = this.amountKeywords.some(keyword => normalized.includes(keyword));
-      const hasCurrency = /(CHF|EUR|USD|GBP|SEK|NOK|DKK|CAD|AUD|NZD|JPY|CNY|INR|€|\$|£)/i.test(line);
-      const weightBase = (hasKeyword ? 6 : 0) + (hasCurrency ? 3 : 0);
+      const hasStrongKeyword = strongKeywords.some(kw => normalized.includes(kw));
+      if (!hasStrongKeyword) continue;
 
-      for (const match of matches) {
-        const weight = weightBase + (match.currency ? 1 : 0) + Math.min(match.value / 1000, 2);
-        candidates.push({ value: match.value, currency: match.currency, weight });
+      // Check amount on same line first
+      let matches = this.extractAmountsFromLine(line);
+      if (matches.length > 0) {
+        for (const match of matches) {
+          if (match.value >= 10 && match.value <= 999999) {
+            const weight = 100 + (match.currency ? 10 : 0) + Math.min(match.value / 100000, 5);
+            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.95 });
+          }
+        }
+      }
+
+      // If no amount on same line, check next line
+      if (matches.length === 0 && i + 1 < lines.length) {
+        const nextLine = lines[i + 1];
+        matches = this.extractAmountsFromLine(nextLine);
+        for (const match of matches) {
+          if (match.value >= 10 && match.value <= 999999) {
+            // Very high weight for amount right after keyword (even higher than same line)
+            const weight = 110 + (match.currency ? 10 : 0) + Math.min(match.value / 100000, 5);
+            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.95 });
+          }
+        }
       }
     }
 
-    if (!candidates.length) {
-      const globalMatches = this.extractAmountsFromLine(text);
-      for (const match of globalMatches) {
-        const weight = (match.currency ? 2 : 0) + Math.min(match.value / 1000, 3);
-        candidates.push({ value: match.value, currency: match.currency, weight });
+    // Priority 2: Search for lines with general amount keywords
+    if (candidates.length === 0) {
+      for (const line of lines) {
+        if (!line) continue;
+        const normalized = this.stripDiacritics(line).toLowerCase();
+        const hasKeyword = this.amountKeywords.some(keyword => normalized.includes(keyword));
+        if (!hasKeyword) continue;
+
+        const matches = this.extractAmountsFromLine(line);
+        for (const match of matches) {
+          if (match.value >= 10 && match.value <= 999999) {
+            const weight = 50 + (match.currency ? 10 : 0) + Math.min(match.value / 100000, 3);
+            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.80 });
+          }
+        }
+      }
+    }
+
+    // Priority 3: Search for amounts with currency (even without keywords)
+    if (candidates.length === 0) {
+      for (const line of lines) {
+        if (!line) continue;
+        const hasCurrency = /(CHF|EUR|USD|GBP|SEK|NOK|DKK|CAD|AUD|NZD|JPY|CNY|INR|€|\$|£)/i.test(line);
+        if (!hasCurrency) continue;
+
+        const matches = this.extractAmountsFromLine(line);
+        for (const match of matches) {
+          if (match.value >= 10 && match.value <= 999999) {
+            const weight = 30 + (match.currency ? 5 : 0) + Math.min(match.value / 100000, 2);
+            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.65 });
+          }
+        }
+      }
+    }
+
+    // Fallback: Last larger amount in the document
+    if (candidates.length === 0) {
+      const allMatches = this.extractAmountsFromLine(text);
+      const largeAmounts = allMatches.filter(m => m.value >= 50 && m.value <= 999999);
+      if (largeAmounts.length > 0) {
+        // Pick the last (latest) large amount
+        const last = largeAmounts[largeAmounts.length - 1];
+        candidates.push({ value: last.value, currency: last.currency, weight: 5, confidence: 0.40 });
       }
     }
 
@@ -734,12 +808,21 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (doc.derived_paid) return doc.derived_paid;
     const text = (doc.extracted_text || '').toLowerCase();
     if (text.includes('bezahlt') || text.includes('paid')) return 'Paid';
-    if (doc.status === 'processed') return 'Unpaid';
+    // For processed or saved documents, default to unpaid
+    if (doc.status === 'processed' || doc.status === 'saved') return 'Unpaid';
+    // For any document with extracted text or derived_amount, default to unpaid if not marked paid
+    if (doc.extracted_text || doc.derived_amount) return 'Unpaid';
     return 'Pending';
   }
 
+  hasExtractedData(doc: DocumentItem): boolean {
+    return !!(doc.extracted_text && doc.extracted_text.trim().length > 0);
+  }
+
   showUnpaidLabel(doc: DocumentItem): boolean {
-    return doc.status === 'processed' && this.derivePaidStatus(doc) === 'Unpaid';
+    // Show Unpaid label for 'processed' or 'saved' status documents
+    // This includes documents that have been manually marked as unpaid
+    return doc.status === 'processed' || doc.status === 'saved';
   }
 
   getQRCodeUrl(docId: string): string | undefined {
@@ -932,10 +1015,16 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       }
 
       const numeric = this.parseAmountValue(raw);
+      
+      // Skip invalid amounts
       if (!Number.isFinite(numeric)) continue;
+      
+      // Skip amounts that are clearly not invoice amounts
+      // Too small (< 0.5) or too large (> 1,000,000)
+      if (numeric < 0.5 || numeric > 1000000) continue;
 
-      const before = text.slice(Math.max(0, match.index - 6), match.index);
-      const after = text.slice(match.index + match[0].length, match.index + match[0].length + 6);
+      const before = text.slice(Math.max(0, match.index - 10), match.index);
+      const after = text.slice(match.index + match[0].length, match.index + match[0].length + 10);
       const currency = this.detectCurrency(before) || this.detectCurrency(after);
       results.push({ value: Math.abs(numeric), currency });
     }
@@ -1112,14 +1201,14 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       const frequency = tone === 'success' ? 880 : tone === 'error' ? 220 : 660;
       osc.type = 'sine';
       osc.frequency.setValueAtTime(frequency, ctx.currentTime);
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.8);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(ctx.currentTime + 0.4);
+      osc.stop(ctx.currentTime + 0.8);
       osc.onended = () => {
         osc.disconnect();
         gain.disconnect();

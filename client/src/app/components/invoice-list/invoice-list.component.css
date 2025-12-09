@@ -364,6 +364,12 @@ button:active,
   box-shadow: 0 10px 25px rgba(139, 92, 246, 0.28);
 }
 
+.status-unknown {
+  background-color: #6b7280;
+  color: #ffffff;
+  box-shadow: 0 10px 25px rgba(148, 163, 184, 0.28);
+}
+
 
 .invoice-table th {
   font-weight: 500;

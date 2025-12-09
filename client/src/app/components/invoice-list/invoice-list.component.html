@@ -80,7 +80,7 @@
             <td>
               <div class="status-container">
                 <span *ngIf="doc.status === 'paid'" class="status status-paid">Paid</span>
-                <span *ngIf="doc.status === 'saved'" class="status status-saved">Saved</span>
+                <span *ngIf="doc.status === 'saved' && !hasExtractedData(doc)" class="status status-saved">Saved</span>
                 <span *ngIf="showUnpaidLabel(doc)" class="status status-unpaid">Unpaid</span>
                 <span *ngIf="doc.status === 'archived'" class="status status-archived">Archived</span>
               </div>
