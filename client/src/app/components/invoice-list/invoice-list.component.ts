@@ -32,7 +32,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   private searchSubject = new Subject<string>();
   
   editingDocId = signal<string | null>(null);
-  editForm = signal<{ date: string; amount: string }>({ date: '', amount: '' });
+  editForm: { date: string; amount: string } = { date: '', amount: '' };
 
   private destroy$ = new Subject<void>();
 
@@ -260,10 +260,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   startEdit(doc: DocumentItem, event: Event): void {
     event.stopPropagation();
     this.editingDocId.set(doc.id);
-    this.editForm.set({
+    this.editForm = {
       date: this.deriveInvoiceDate(doc),
       amount: this.deriveAmount(doc)
-    });
+    };
     // Ensure row is expanded
     this.expandedDocId.set(doc.id);
   }
@@ -276,8 +276,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   saveEdit(doc: DocumentItem, event: Event): void {
     event.stopPropagation();
     const updates = {
-      confirmed_due_date: this.editForm().date,
-      confirmed_amount: this.editForm().amount
+      confirmed_due_date: this.editForm.date,
+      confirmed_amount: this.editForm.amount
     };
     
     this.documentService.update(doc.id, updates).subscribe({
