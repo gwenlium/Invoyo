@@ -15,7 +15,7 @@
   <div class="header-row">
     <div>
       <p class="eyebrow">Realtime feed</p>
-      <h2>Documents</h2>
+      <h2>Files</h2>
       <div class="tabs">
         <button class="tab tab-all" [class.active]="activeTab() === 'all'" (click)="setTab('all')">All</button>
         <button class="tab tab-unpaid" [class.active]="activeTab() === 'unpaid'" (click)="setTab('unpaid')">Unpaid</button>
@@ -24,24 +24,25 @@
       </div>
     </div>
     <div class="actions">
-      <div class="upload-section">
-        <label class="upload-btn" [class.disabled]="isUploading()">
-          <input type="file" accept="application/pdf,image/png,image/jpeg" (change)="onFileSelected($event)" [disabled]="isUploading()" />
-          <span *ngIf="!isUploading()">Upload</span>
-          <span *ngIf="isUploading()">Uploading {{ uploadProgress() }}%</span>
-        </label>
-        <span class="upload-success" *ngIf="uploadMessage()">{{ uploadMessage() }}</span>
-      </div>
-
       <div class="search-box">
-        <input type="text" placeholder="Search documents..." (input)="onSearch($event)" class="search-input">
+        <input type="text" placeholder="Search files..." (input)="onSearch($event)" class="search-input">
       </div>
-      <span class="timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'HH:mm' }}</span>
+    </div>
+  </div>
+
+  <div class="table-header-bar">
+    <div class="upload-section">
+      <label class="upload-btn" [class.disabled]="isUploading()">
+        <input type="file" accept="application/pdf,image/png,image/jpeg" multiple (change)="onFileSelected($event)" [disabled]="isUploading()" />
+        <span *ngIf="!isUploading()">Upload</span>
+        <span *ngIf="isUploading()">Uploading {{ uploadProgress() }}%</span>
+      </label>
+      <span class="upload-success" *ngIf="uploadMessage()">{{ uploadMessage() }}</span>
     </div>
   </div>
 
   <div class="invoice-table-container">
-    <div *ngIf="loading()" class="inline-note">Loading documents…</div>
+    <div *ngIf="loading()" class="inline-note">Loading files…</div>
     <div *ngIf="error()" class="inline-error">{{ error() }}</div>
 
     <table class="invoice-table" *ngIf="!loading() && filteredDocuments.length">
@@ -117,7 +118,28 @@
 
                 <div class="extracted-section">
                   <h4>Extracted Text</h4>
-                  <pre class="text-preview">{{ doc.extracted_text || 'No text extracted.' }}</pre>
+                  <ng-container *ngIf="doc.extracted_text; else noExtractedText">
+                    <div class="extracted-toolbar">
+                      <button type="button" class="ghost tiny" (click)="copyExtractedText(doc, $event)">Copy</button>
+                    </div>
+                    <div class="text-preview enhanced">
+                      <div
+                        *ngFor="let line of formattedExtractedText(doc); trackBy: trackFormattedLine"
+                        class="extracted-line"
+                        [ngClass]="line.classList"
+                      >
+                        <span class="line-number">{{ line.index + 1 }}</span>
+                        <span class="line-text">{{ line.text || ' ' }}</span>
+                      </div>
+                    </div>
+                    <details class="raw-text">
+                      <summary>Show raw text</summary>
+                      <pre class="text-preview raw">{{ doc.extracted_text }}</pre>
+                    </details>
+                  </ng-container>
+                  <ng-template #noExtractedText>
+                    <pre class="text-preview">No text extracted.</pre>
+                  </ng-template>
                 </div>
               </div>
             </td>
@@ -130,4 +152,6 @@
       No documents found in {{ tabLabels[activeTab()] }} tab.
     </div>
   </div>
+
+  <div class="bottom-right-timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'HH:mm' }}</div>
 </div>

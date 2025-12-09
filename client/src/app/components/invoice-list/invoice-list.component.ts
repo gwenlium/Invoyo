@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpEventType } from '@angular/common/http';
-import { Subject } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { DocumentService } from '../../services/document.service';
 import { DocumentItem } from '../../models/document.model';
@@ -17,6 +17,12 @@ interface ToastMessage {
   background: string;
   color: string;
   leaving?: boolean;
+}
+
+interface FormattedExtractedLine {
+  index: number;
+  text: string;
+  classList: string[];
 }
 
 @Component({
@@ -46,12 +52,93 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   
   // QR Code data URLs mapped by document ID
   qrCodeUrls = signal<Map<string, string>>(new Map());
-
-  // Local overrides for processed_at to ensure Modified column updates immediately
+  
   clientModified = signal<Map<string, string>>(new Map());
 
   // UI feedback toasts
   toasts = signal<ToastMessage[]>([]);
+
+  private readonly dueKeywords = [
+    'due date',
+    'due-date',
+    'payment due',
+    'payment deadline',
+    'due on',
+    'fällig',
+    'faellig',
+    'zahlbar',
+    'zahlungsziel',
+    'verfall',
+    'scadenza',
+    'scad.',
+    'vencimiento',
+    'vence',
+    'deadline'
+  ];
+
+  private readonly amountKeywords = [
+    'total',
+    'amount',
+    'betrag',
+    'summe',
+    'balance',
+    'due',
+    'payable',
+    'zahlbetrag',
+    'grand total',
+    'invoice total',
+    'totalbetrag',
+    'rechnungsbetrag',
+    'gesamtbetrag',
+    'zu zahlen',
+    'amount due',
+    'total due',
+    'net total',
+    'brutto',
+    'netto'
+  ];
+
+  private readonly supportedCurrencies = new Set([
+    'CHF','EUR','USD','GBP','SEK','NOK','DKK','CAD','AUD','NZD','JPY','CNY','INR'
+  ]);
+
+  private readonly monthLookup: Record<string, number> = {
+    jan: 1,
+    januar: 1,
+    january: 1,
+    feb: 2,
+    februar: 2,
+    february: 2,
+    mar: 3,
+    maerz: 3,
+    marz: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    mai: 5,
+    may: 5,
+    jun: 6,
+    juni: 6,
+    june: 6,
+    juli: 7,
+    july: 7,
+    jul: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    oktober: 10,
+    october: 10,
+    octobre: 10,
+    okt: 10,
+    nov: 11,
+    november: 11,
+    dez: 12,
+    dezember: 12,
+    december: 12
+  };
 
   private destroy$ = new Subject<void>();
 
@@ -72,6 +159,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   private toastIdCounter = 0;
   private toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
   private audioContext?: AudioContext;
+  private formattedTextCache = new Map<string, { source: string; lines: FormattedExtractedLine[] }>();
+  private uploadSubscription?: Subscription;
 
   constructor(private documentService: DocumentService) {}
 
@@ -100,6 +189,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             return localTs ? { ...item, processed_at: localTs } : item;
           });
           this.documents.set(merged);
+          this.formattedTextCache.clear();
           this.loading.set(false);
           this.error.set('');
           this.lastUpdated.set(new Date());
@@ -120,6 +210,48 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         this.pollingTimer = null;
       }
     });
+  }
+
+  formattedExtractedText(doc: DocumentItem): FormattedExtractedLine[] {
+    const text = doc.extracted_text ?? '';
+    const cached = this.formattedTextCache.get(doc.id);
+    if (cached && cached.source === text) {
+      return cached.lines;
+    }
+
+    const lines = this.buildFormattedLines(text);
+    this.formattedTextCache.set(doc.id, { source: text, lines });
+    return lines;
+  }
+
+  trackFormattedLine(_index: number, line: FormattedExtractedLine): number {
+    return line.index;
+  }
+
+  async copyExtractedText(doc: DocumentItem, event?: Event): Promise<void> {
+    if (event) event.stopPropagation();
+    const text = doc.extracted_text;
+    if (!text) return;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      this.triggerToast('Extracted text copied', { background: '#2563eb', color: '#ffffff', sound: 'info' });
+    } catch (err) {
+      console.error('Failed to copy extracted text:', err);
+      this.triggerToast('Could not copy text', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+    }
   }
 
   setTab(tab: TabKey): void {
@@ -251,40 +383,61 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
-    const file = input.files[0];
-    this.upload(file);
+    this.uploadFiles(Array.from(input.files));
     input.value = '';
   }
 
-  upload(file: File): void {
+  uploadFiles(files: File[]): void {
+    if (!files.length) return;
+
+    this.uploadSubscription?.unsubscribe();
     this.uploadProgress.set(0);
     this.uploadMessage.set('');
     this.isUploading.set(true);
 
-    this.documentService.upload(file).subscribe({
-      next: (event) => {
-        if (event.type === HttpEventType.UploadProgress && event.total) {
-          const percent = Math.round((100 * event.loaded) / event.total);
-          this.uploadProgress.set(percent);
+    const total = files.length;
+    let completed = 0;
+
+    this.uploadSubscription = this.documentService.uploadBatch(files).subscribe({
+      next: ({ event, file, index }) => {
+        if (event.type === HttpEventType.UploadProgress) {
+          const filePortion = event.total ? event.loaded / event.total : 0;
+          const aggregate = ((completed + filePortion) / total) * 100;
+          this.uploadProgress.set(Math.round(aggregate));
+          this.uploadMessage.set(`Uploading ${index + 1}/${total}: ${file.name}`);
         }
+
         if (event.type === HttpEventType.Response) {
-          this.uploadMessage.set(`Uploaded: ${event.body?.filename}`);
-          this.isUploading.set(false);
-          
-          // Force immediate refresh and reset polling to fast mode
+          completed += 1;
+          this.uploadProgress.set(Math.round((completed / total) * 100));
+          this.uploadMessage.set(`Uploaded ${completed}/${total}`);
+
           if (this.pollingTimer) clearTimeout(this.pollingTimer);
           this.startPolling();
-          
-          // Clear success message after 3s
-          setTimeout(() => this.uploadMessage.set(''), 3000);
-          this.triggerToast('Document uploaded', { background: '#22c55e', color: '#ffffff', sound: 'success' });
+
+          this.triggerToast(`Document uploaded: ${event.body?.filename || file.name}`, {
+            background: '#22c55e',
+            color: '#ffffff',
+            sound: 'success'
+          });
+
+          if (completed === total) {
+            setTimeout(() => this.uploadMessage.set(''), 3000);
+          }
         }
       },
       error: (err) => {
-        this.error.set(err?.error?.detail || 'Upload failed');
+        const context = err?.uploadContext;
+        const fileName = context?.file?.name ?? 'file';
+        this.error.set(err?.error?.detail || `Upload failed for ${fileName}`);
         this.isUploading.set(false);
+        this.uploadProgress.set(0);
+        this.uploadMessage.set('');
         this.triggerToast('Upload failed', { background: '#ef4444', color: '#ffffff', sound: 'error' });
       },
+      complete: () => {
+        this.isUploading.set(false);
+      }
     });
   }
 
@@ -439,6 +592,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (this.pollingTimer) {
       clearTimeout(this.pollingTimer);
     }
+    this.uploadSubscription?.unsubscribe();
     this.toastTimers.forEach(timeoutId => clearTimeout(timeoutId));
     this.toastTimers.clear();
     if (this.audioContext) {
@@ -478,43 +632,73 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   deriveInvoiceDate(doc: DocumentItem): string {
-    let dateStr = doc.confirmed_due_date || doc.derived_due;
-    
-    if (!dateStr) {
-      const text = doc.extracted_text || '';
-      // Look for Rechnungsdatum, Datum, Date, or just a date pattern near keywords
-      // Supports DD.MM.YYYY or YYYY-MM-DD
-      const match = text.match(/(?:Rechnungsdatum|Datum|Date)\s*[:\-]?\s*((?:\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{2,4})|(?:\d{4}[.\/\-]\d{1,2}[.\/\-]\d{1,2}))/i);
-      if (match) dateStr = match[1];
+    const confirmed = this.normalizeDate(doc.confirmed_due_date);
+    if (confirmed) return confirmed;
+
+    const derived = this.normalizeDate(doc.derived_due);
+    if (derived) return derived;
+
+    const text = doc.extracted_text || '';
+    if (!text) return '—';
+
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const fallbackDates: string[] = [];
+
+    for (const line of lines) {
+      const normalized = this.stripDiacritics(line).toLowerCase();
+      const candidate = this.findDateInLine(line);
+      if (!candidate) continue;
+
+      if (this.dueKeywords.some(keyword => normalized.includes(keyword))) {
+        return candidate;
+      }
+
+      fallbackDates.push(candidate);
     }
 
-    if (!dateStr) return '—';
-
-    // Normalize to DD.MM.YYYY
-    // Handle YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      const [y, m, d] = dateStr.split('-');
-      return `${d}.${m}.${y}`;
-    }
-    // Handle YYYY.MM.DD
-    if (/^\d{4}\.\d{2}\.\d{2}$/.test(dateStr)) {
-      const [y, m, d] = dateStr.split('.');
-      return `${d}.${m}.${y}`;
-    }
-    // Handle DD/MM/YYYY or DD-MM-YYYY -> DD.MM.YYYY
-    if (/^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$/.test(dateStr)) {
-      return dateStr.replace(/[/\-]/g, '.');
-    }
-
-    return dateStr;
+    return fallbackDates.length ? fallbackDates[0] : '—';
   }
 
   deriveAmount(doc: DocumentItem): string {
     if (doc.confirmed_amount) return doc.confirmed_amount;
     if (doc.derived_amount) return doc.derived_amount;
+
     const text = doc.extracted_text || '';
-    const match = text.match(/(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/);
-    return match ? match[1] : '—';
+    if (!text) return '—';
+
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const candidates: Array<{ value: number; currency?: string; weight: number }> = [];
+
+    for (const line of lines) {
+      if (!line) continue;
+      const matches = this.extractAmountsFromLine(line);
+      if (!matches.length) continue;
+
+      const normalized = this.stripDiacritics(line).toLowerCase();
+      const hasKeyword = this.amountKeywords.some(keyword => normalized.includes(keyword));
+      const hasCurrency = /(CHF|EUR|USD|GBP|SEK|NOK|DKK|CAD|AUD|NZD|JPY|CNY|INR|€|\$|£)/i.test(line);
+      const weightBase = (hasKeyword ? 6 : 0) + (hasCurrency ? 3 : 0);
+
+      for (const match of matches) {
+        const weight = weightBase + (match.currency ? 1 : 0) + Math.min(match.value / 1000, 2);
+        candidates.push({ value: match.value, currency: match.currency, weight });
+      }
+    }
+
+    if (!candidates.length) {
+      const globalMatches = this.extractAmountsFromLine(text);
+      for (const match of globalMatches) {
+        candidates.push({ value: match.value, currency: match.currency, weight: match.currency ? 1 : 0 });
+      }
+    }
+
+    if (!candidates.length) {
+      return '—';
+    }
+
+    candidates.sort((a, b) => b.weight - a.weight || b.value - a.value);
+    const best = candidates[0];
+    return this.formatAmountValue(best.value, best.currency);
   }
 
   derivePaidStatus(doc: DocumentItem): string {
@@ -548,6 +732,257 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       });
     } catch (err) {
       console.error('Failed to generate QR code:', err);
+    }
+  }
+
+  private findDateInLine(line: string): string | null {
+    if (!line) return null;
+    const fragments = [
+      /\d{4}-\d{2}-\d{2}/g,
+      /\d{4}[.\/]\d{1,2}[.\/]\d{1,2}/g,
+      /\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}/g,
+      /\d{1,2}\.\s*[A-Za-zÄÖÜäöüß.]+\s*\d{2,4}/g,
+      /[A-Za-zÄÖÜäöüß.]+\s+\d{1,2}(?:\s*,)?\s*\d{2,4}/g
+    ];
+
+    for (const pattern of fragments) {
+      pattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(line)) !== null) {
+        const normalized = this.normalizeDate(match[0]);
+        if (normalized) {
+          return normalized;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeDate(input?: string | null): string | null {
+    if (!input) return null;
+    let candidate = input.trim();
+    if (!candidate) return null;
+
+    const isoDateTime = candidate.match(/^(\d{4}-\d{2}-\d{2})[T\s]/);
+    if (isoDateTime) {
+      candidate = isoDateTime[1];
+    }
+
+    candidate = candidate.replace(/\s+/g, ' ');
+
+    let parts = candidate.match(/^(\d{4})[.\/-](\d{1,2})[.\/-](\d{1,2})$/);
+    if (parts) {
+      return this.formatDateParts(
+        parseInt(parts[3], 10),
+        parseInt(parts[2], 10),
+        parseInt(parts[1], 10)
+      );
+    }
+
+    parts = candidate.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/);
+    if (parts) {
+      return this.formatDateParts(
+        parseInt(parts[1], 10),
+        parseInt(parts[2], 10),
+        parseInt(parts[3], 10)
+      );
+    }
+
+    parts = this.stripDiacritics(candidate).match(/^(\d{1,2})\.?\s*([A-Za-z]+)\s+(\d{2,4})$/);
+    if (parts) {
+      const month = this.monthFromName(parts[2]);
+      if (month) {
+        return this.formatDateParts(
+          parseInt(parts[1], 10),
+          month,
+          parseInt(parts[3], 10)
+        );
+      }
+    }
+
+    parts = this.stripDiacritics(candidate).match(/^([A-Za-z]+)\s+(\d{1,2})(?:\s*,)?\s*(\d{2,4})$/);
+    if (parts) {
+      const month = this.monthFromName(parts[1]);
+      if (month) {
+        return this.formatDateParts(
+          parseInt(parts[2], 10),
+          month,
+          parseInt(parts[3], 10)
+        );
+      }
+    }
+
+    return null;
+  }
+
+  private formatDateParts(day: number, month: number, year: number): string | null {
+    if (!day || !month || !year) return null;
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+    if (year < 100) {
+      year += year >= 70 ? 1900 : 2000;
+    }
+    const dd = day.toString().padStart(2, '0');
+    const mm = month.toString().padStart(2, '0');
+    const yyyy = year.toString().padStart(4, '0');
+    return `${dd}.${mm}.${yyyy}`;
+  }
+
+  private monthFromName(token: string): number | null {
+    if (!token) return null;
+    const sanitized = this.stripDiacritics(token).toLowerCase().replace(/\./g, '');
+    return this.monthLookup[sanitized] ?? null;
+  }
+
+  private stripDiacritics(value: string): string {
+    if (!value) return '';
+    if (typeof value.normalize === 'function') {
+      return value
+        .normalize('NFD')
+        .replace(/[ -]/g, '')
+        .replace(/[-]/g, '')
+        .replace(/[ -]/g, '')
+        .replace(/[\u0300-\u036f]/g, '');
+    }
+    return value
+      .replace(/[äÄ]/g, 'ae')
+      .replace(/[öÖ]/g, 'oe')
+      .replace(/[üÜ]/g, 'ue')
+      .replace(/[ß]/g, 'ss');
+  }
+
+  private buildFormattedLines(text: string): FormattedExtractedLine[] {
+    if (!text) return [];
+
+    const lines = text.split(/\r?\n/);
+    const formatted: FormattedExtractedLine[] = [];
+
+    for (let index = 0; index < lines.length; index++) {
+      const raw = lines[index] ?? '';
+      const trimmed = raw.trim();
+      const normalized = this.stripDiacritics(trimmed).toLowerCase();
+      const classList: string[] = [];
+
+      if (!trimmed) {
+        classList.push('is-blank');
+      } else {
+        const hasDueKeyword = this.dueKeywords.some(keyword => normalized.includes(keyword));
+        const hasAmountKeyword = this.amountKeywords.some(keyword => normalized.includes(keyword));
+        const containsDate = Boolean(this.findDateInLine(trimmed));
+        const containsAmount = this.extractAmountsFromLine(trimmed).length > 0;
+
+        if (hasDueKeyword) classList.push('has-due-keyword');
+        if (hasAmountKeyword) classList.push('has-amount-keyword');
+        if (containsDate) classList.push('contains-date');
+        if (containsAmount) classList.push('contains-amount');
+
+        if (classList.length) {
+          classList.push('is-highlighted');
+        }
+      }
+
+      formatted.push({
+        index,
+        text: trimmed ? trimmed.replace(/\s{2,}/g, ' ') : '',
+        classList
+      });
+    }
+
+    return formatted;
+  }
+
+  private extractAmountsFromLine(text: string): Array<{ value: number; currency?: string }> {
+    if (!text) return [];
+    const results: Array<{ value: number; currency?: string }> = [];
+    const numberRegex = /-?\d{1,3}(?:[’'\s.,]\d{3})*(?:[.,]\d{2}|[.,][-–—])?/g;
+    let match: RegExpExecArray | null;
+    while ((match = numberRegex.exec(text)) !== null) {
+      let raw = match[0];
+      if (/[.,][-–—]$/.test(raw)) {
+        raw = raw.slice(0, -2) + (raw.includes(',') ? ',00' : '.00');
+      }
+
+      const numeric = this.parseAmountValue(raw);
+      if (!Number.isFinite(numeric)) continue;
+
+      const before = text.slice(Math.max(0, match.index - 6), match.index);
+      const after = text.slice(match.index + match[0].length, match.index + match[0].length + 6);
+      const currency = this.detectCurrency(before) || this.detectCurrency(after);
+      results.push({ value: Math.abs(numeric), currency });
+    }
+    return results;
+  }
+
+  private parseAmountValue(raw: string): number {
+    if (!raw) return NaN;
+    let cleaned = raw
+      .replace(/’/g, "'")
+      .replace(/[\s']/g, '')
+      .replace(/−/g, '-')
+      .replace(/–/g, '-')
+      .replace(/—/g, '-');
+
+    const commaIsDecimal = cleaned.includes(',') && (!cleaned.includes('.') || cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.'));
+    if (commaIsDecimal) {
+      cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      cleaned = cleaned.replace(/,/g, '');
+    }
+
+    cleaned = cleaned.replace(/[^0-9.-]/g, '');
+    return parseFloat(cleaned);
+  }
+
+  private detectCurrency(fragment: string): string | undefined {
+    if (!fragment) return undefined;
+    const match = fragment.match(/(SFR|FR\.?|CHF|EUR|USD|CAD|AUD|NZD|GBP|SEK|NOK|DKK|JPY|CNY|INR|€|\$|£)/i);
+    if (!match) return undefined;
+    return this.resolveCurrency(match[1]);
+  }
+
+  private resolveCurrency(token?: string): string | undefined {
+    if (!token) return undefined;
+    const trimmed = token.trim();
+    if (!trimmed) return undefined;
+    const upper = trimmed.toUpperCase();
+    if (upper === '€') return 'EUR';
+    if (upper === '$' || upper === 'US$') return 'USD';
+    if (upper.endsWith('$')) {
+      const code = upper.replace(/\$/g, '');
+      if (this.supportedCurrencies.has(code)) {
+        return code;
+      }
+    }
+    if (upper === '£') return 'GBP';
+    if (upper === 'SFR' || upper === 'FR.' || upper === 'FR' || upper === 'CHF') return 'CHF';
+    if (this.supportedCurrencies.has(upper)) {
+      return upper;
+    }
+    return undefined;
+  }
+
+  private formatAmountValue(value: number, currency?: string): string {
+    if (!Number.isFinite(value)) {
+      return '—';
+    }
+    const absolute = Math.abs(value);
+    try {
+      if (currency && this.supportedCurrencies.has(currency)) {
+        return new Intl.NumberFormat('de-CH', {
+          style: 'currency',
+          currency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(absolute);
+      }
+
+      return new Intl.NumberFormat('de-CH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(absolute);
+    } catch {
+      return (currency ? `${currency} ` : '') + absolute.toFixed(2);
     }
   }
 

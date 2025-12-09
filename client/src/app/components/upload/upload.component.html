@@ -5,7 +5,7 @@
   </div>
 
   <label class="upload-label">
-    <input type="file" accept="application/pdf,image/png,image/jpeg" (change)="onFileSelected($event)" />
+    <input type="file" accept="application/pdf,image/png,image/jpeg" multiple (change)="onFileSelected($event)" />
     <span>Select file</span>
   </label>
 

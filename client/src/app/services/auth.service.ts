@@ -11,7 +11,7 @@ interface TokenResponse {
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private tokenKey = 'invoiceprocessor_token';
+  private tokenKey = 'invoyo_token';
   token = signal<string | null>(this.getStoredToken());
 
   constructor(private http: HttpClient) {}

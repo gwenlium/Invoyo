@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams, HttpEvent } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, EMPTY, from, throwError } from 'rxjs';
+import { concatMap, map, catchError } from 'rxjs/operators';
 import { DocumentItem, DocumentListResponse } from '../models/document.model';
 
 @Injectable({ providedIn: 'root' })
@@ -31,6 +32,25 @@ export class DocumentService {
       reportProgress: true,
       observe: 'events',
     });
+  }
+
+  uploadBatch(files: File[]): Observable<{ event: HttpEvent<DocumentItem>; file: File; index: number; total: number }> {
+    if (!files.length) {
+      return EMPTY;
+    }
+
+    const total = files.length;
+    return from(files).pipe(
+      concatMap((file, index) =>
+        this.upload(file).pipe(
+          map(event => ({ event, file, index, total })),
+          catchError(err => {
+            (err as any).uploadContext = { file, index, total };
+            return throwError(() => err);
+          })
+        )
+      )
+    );
   }
 
   download(documentId: string): Observable<Blob> {
