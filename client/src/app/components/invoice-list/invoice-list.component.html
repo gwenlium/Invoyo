@@ -84,7 +84,7 @@
                     <button class="ghost small glow" (click)="viewPdf(doc, $event)">View Original PDF</button>
                     <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small glow" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
                     <button *ngIf="doc.status === 'paid'" class="accent small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
-                    <button *ngIf="doc.status === 'paid'" class="secondary small" (click)="archiveDocument(doc, $event)">Archive</button>
+                    <button *ngIf="doc.status !== 'archived'" class="secondary small" (click)="archiveDocument(doc, $event)">Archive</button>
                     <button *ngIf="doc.status === 'archived'" class="secondary small" (click)="unarchive(doc, $event)">Unarchive</button>
                     <button class="danger small glow" (click)="deleteDocument(doc, $event)">Delete</button>
                   </div>
@@ -92,7 +92,7 @@
                 
                 <div *ngIf="editingDocId() === doc.id" class="edit-form">
                   <div class="form-group">
-                    <label>Invoice Date</label>
+                    <label>Due Date</label>
                     <input [(ngModel)]="editForm().date" placeholder="DD.MM.YYYY">
                   </div>
                   <div class="form-group">

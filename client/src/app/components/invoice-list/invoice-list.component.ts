@@ -369,7 +369,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           return next;
         });
         this.documents.update(docs => docs.filter(d => d.id !== doc.id));
-        this.triggerToast('Document deleted', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+        this.triggerToast('File deleted', { background: '#ef4444', color: '#ffffff', sound: 'error' });
       },
       error: () => this.triggerToast('Failed to delete document', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
@@ -415,7 +415,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           if (this.pollingTimer) clearTimeout(this.pollingTimer);
           this.startPolling();
 
-          this.triggerToast(`Document uploaded: ${event.body?.filename || file.name}`, {
+          this.triggerToast(`File uploaded: ${event.body?.filename || file.name}`, {
             background: '#22c55e',
             color: '#ffffff',
             sound: 'success'
@@ -688,7 +688,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (!candidates.length) {
       const globalMatches = this.extractAmountsFromLine(text);
       for (const match of globalMatches) {
-        candidates.push({ value: match.value, currency: match.currency, weight: match.currency ? 1 : 0 });
+        const weight = (match.currency ? 2 : 0) + Math.min(match.value / 1000, 3);
+        candidates.push({ value: match.value, currency: match.currency, weight });
       }
     }
 
@@ -923,9 +924,22 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       .replace(/–/g, '-')
       .replace(/—/g, '-');
 
-    const commaIsDecimal = cleaned.includes(',') && (!cleaned.includes('.') || cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.'));
+    const lastCommaIdx = cleaned.lastIndexOf(',');
+    const lastDotIdx = cleaned.lastIndexOf('.');
+    const commaIsDecimal = lastCommaIdx > -1 && (lastDotIdx === -1 || lastCommaIdx > lastDotIdx) && 
+                          cleaned.slice(lastCommaIdx + 1).match(/^\d{2}(?:\D|$)/);
+    
     if (commaIsDecimal) {
       cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
+    } else if (lastDotIdx > lastCommaIdx && lastCommaIdx > -1) {
+      cleaned = cleaned.replace(/,/g, '');
+    } else if (lastCommaIdx > -1) {
+      const afterComma = cleaned.slice(lastCommaIdx + 1).match(/^\d+/);
+      if (afterComma && afterComma[0].length === 2) {
+        cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
+      } else {
+        cleaned = cleaned.replace(/,/g, '');
+      }
     } else {
       cleaned = cleaned.replace(/,/g, '');
     }
