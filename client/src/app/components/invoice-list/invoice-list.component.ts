@@ -9,12 +9,14 @@ import { DocumentItem } from '../../models/document.model';
 import QRCode from 'qrcode';
 
 type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'uploaded' | 'processed';
+type TabKey = 'all' | 'unpaid' | 'paid' | 'archived';
 
 interface ToastMessage {
   id: number;
   message: string;
   background: string;
   color: string;
+  leaving?: boolean;
 }
 
 @Component({
@@ -54,7 +56,13 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   // Filter state
-  activeTab = signal<'unpaid' | 'paid' | 'archived'>('unpaid');
+  activeTab = signal<TabKey>('all');
+  readonly tabLabels: Record<TabKey, string> = {
+    all: 'All',
+    unpaid: 'Unpaid',
+    paid: 'Paid',
+    archived: 'Archived'
+  };
   
   // Sorting state
   sortColumn = signal<string>('uploaded');
@@ -114,7 +122,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     });
   }
 
-  setTab(tab: 'unpaid' | 'paid' | 'archived'): void {
+  setTab(tab: TabKey): void {
     this.activeTab.set(tab);
     this.manualRefresh();
   }
@@ -138,17 +146,22 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     const sortCol = this.sortColumn();
     const sortDir = this.sortDirection();
     
-    let docs = this.documents().filter(doc => {
-      // 1. Tab Filter
-      if (tab === 'unpaid') {
-        return ['pending', 'processing', 'processed', 'failed'].includes(doc.status);
-      } else if (tab === 'paid') {
-        return doc.status === 'paid';
-      } else if (tab === 'archived') {
-        return doc.status === 'archived';
-      }
-      return false;
-    });
+    let docs = this.documents();
+
+    if (tab !== 'all') {
+      docs = docs.filter(doc => {
+        if (tab === 'unpaid') {
+          return ['pending', 'processing', 'processed', 'failed'].includes(doc.status);
+        }
+        if (tab === 'paid') {
+          return doc.status === 'paid';
+        }
+        if (tab === 'archived') {
+          return doc.status === 'archived';
+        }
+        return true;
+      });
+    }
 
     // 2. Sorting
     return docs.sort((a, b) => {
@@ -391,7 +404,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Unarchived', { background: '#9ca3af', color: '#111827', sound: 'info' });
+        this.triggerToast('Unarchived', { background: '#9ca3af', color: '#ffffffff', sound: 'info' });
       },
       error: () => this.triggerToast('Failed to unarchive', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
@@ -431,11 +444,12 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (this.audioContext) {
       this.audioContext.close().catch(() => undefined);
     }
+    this.toasts.set([]);
   }
 
   dismissToast(id: number, event?: Event): void {
     if (event) event.stopPropagation();
-    this.removeToast(id);
+    this.startToastExit(id);
   }
 
   statusClass(status: DocumentItem['status']): string {
@@ -542,21 +556,63 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     palette: { background?: string; color?: string; sound?: 'success' | 'info' | 'error' } = {}
   ): void {
     const id = ++this.toastIdCounter;
-    const background = palette.background ?? '#2563eb';
+    const background = this.withAlpha(palette.background ?? '#2563eb', 0.9);
     const color = palette.color ?? '#ffffff';
-    this.toasts.update(list => [...list, { id, message, background, color }]);
-    const timeoutId = setTimeout(() => this.removeToast(id), 3500);
+    this.toasts.update(list => [...list, { id, message, background, color, leaving: false }]);
+    const timeoutId = setTimeout(() => this.startToastExit(id), 3500);
     this.toastTimers.set(id, timeoutId);
     this.playToastSound(palette.sound ?? 'info');
   }
 
-  private removeToast(id: number): void {
+  private startToastExit(id: number): void {
+    const toast = this.toasts().find(item => item.id === id);
+    if (!toast || toast.leaving) {
+      return;
+    }
+
+    const existingTimer = this.toastTimers.get(id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.toastTimers.delete(id);
+    }
+
+    this.toasts.update(list => list.map(item => item.id === id ? { ...item, leaving: true } : item));
+
+    const exitTimer = setTimeout(() => this.finishToastRemoval(id), 280);
+    this.toastTimers.set(id, exitTimer);
+  }
+
+  private finishToastRemoval(id: number): void {
     const timeoutId = this.toastTimers.get(id);
     if (timeoutId) {
       clearTimeout(timeoutId);
       this.toastTimers.delete(id);
     }
     this.toasts.update(list => list.filter(toast => toast.id !== id));
+  }
+
+  private withAlpha(color: string, alpha: number): string {
+    if (color.startsWith('rgba') || color.startsWith('hsla')) {
+      return color;
+    }
+    if (!color.startsWith('#')) {
+      return color;
+    }
+
+    let hex = color.slice(1);
+    if (hex.length === 3) {
+      hex = hex.split('').map(ch => ch + ch).join('');
+    }
+
+    if (hex.length !== 6) {
+      return color;
+    }
+
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    const clampedAlpha = Math.min(1, Math.max(0, alpha));
+    return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
   }
 
   private playToastSound(tone: 'success' | 'info' | 'error'): void {

@@ -2,6 +2,7 @@
   <div
     *ngFor="let toast of toasts()"
     class="toast"
+    [class.leaving]="toast.leaving"
     [style.background-color]="toast.background"
     [style.color]="toast.color"
   >
@@ -16,6 +17,7 @@
       <p class="eyebrow">Realtime feed</p>
       <h2>Documents</h2>
       <div class="tabs">
+        <button class="tab tab-all" [class.active]="activeTab() === 'all'" (click)="setTab('all')">All</button>
         <button class="tab tab-unpaid" [class.active]="activeTab() === 'unpaid'" (click)="setTab('unpaid')">Unpaid</button>
         <button class="tab tab-paid" [class.active]="activeTab() === 'paid'" (click)="setTab('paid')">Paid</button>
         <button class="tab tab-archived" [class.active]="activeTab() === 'archived'" (click)="setTab('archived')">Archived</button>
@@ -77,13 +79,13 @@
                 <div class="detail-header">
                   <h3>{{ doc.filename }}</h3>
                   <div class="detail-actions">
-                    <button *ngIf="editingDocId() !== doc.id" class="ghost small" (click)="startEdit(doc, $event)">Edit Details</button>
-                    <button class="ghost small" (click)="viewPdf(doc, $event)">View Original PDF</button>
-                    <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
+                    <button *ngIf="editingDocId() !== doc.id" class="ghost small glow" (click)="startEdit(doc, $event)">Edit Details</button>
+                    <button class="ghost small glow" (click)="viewPdf(doc, $event)">View Original PDF</button>
+                    <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small glow" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
                     <button *ngIf="doc.status === 'paid'" class="accent small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
                     <button *ngIf="doc.status === 'paid'" class="secondary small" (click)="archiveDocument(doc, $event)">Archive</button>
                     <button *ngIf="doc.status === 'archived'" class="secondary small" (click)="unarchive(doc, $event)">Unarchive</button>
-                    <button class="danger small" (click)="deleteDocument(doc, $event)">Delete</button>
+                    <button class="danger small glow" (click)="deleteDocument(doc, $event)">Delete</button>
                   </div>
                 </div>
                 
@@ -125,7 +127,7 @@
     </table>
 
     <div *ngIf="!loading() && !filteredDocuments.length && !error()" class="inline-note">
-      No documents found in {{ activeTab() }} tab.
+      No documents found in {{ tabLabels[activeTab()] }} tab.
     </div>
   </div>
 </div>
