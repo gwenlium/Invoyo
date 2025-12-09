@@ -1,15 +1,3 @@
-<div class="delete-modal-backdrop" *ngIf="showDeleteModal()" (click)="cancelDelete()">
-  <div class="delete-modal" (click)="$event.stopPropagation()">
-    <h3>Delete File?</h3>
-    <p>{{ deleteModalDocument()?.filename }}</p>
-    <p class="modal-warning">This action cannot be undone.</p>
-    <div class="modal-actions">
-      <button class="secondary small glow" (click)="cancelDelete()">Cancel</button>
-      <button class="danger small glow" (click)="confirmDelete()">Delete</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast-container">
   <div
     *ngFor="let toast of toasts()"
@@ -90,23 +78,38 @@
             <td>{{ formatTimestamp(doc.uploaded_at) }}</td>
             <td>{{ doc.processed_at ? formatTimestamp(doc.processed_at) : '—' }}</td>
           </tr>
-          <tr *ngIf="expandedDocId() === doc.id" class="detail-row">
+          <tr *ngIf="expandedDocId() === doc.id" 
+              class="detail-row" 
+              [class.just-expanded]="justExpandedDocId() === doc.id">
             <td colspan="7">
               <div class="detail-content">
                 <div class="detail-header">
                   <h3>{{ doc.filename }}</h3>
                   <div class="detail-actions">
                     <button *ngIf="editingDocId() !== doc.id" class="ghost small glow" (click)="startEdit(doc, $event)">Edit Details</button>
-                    <button class="ghost small glow" (click)="viewPdf(doc, $event)">View Original PDF</button>
+                    <button class="ghost small glow" 
+                            [class.opening-file]="openingFileId() === doc.id"
+                            (click)="viewFile(doc, $event)">View File</button>
                     <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small glow" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
                     <button *ngIf="doc.status === 'paid' || doc.status === 'saved'" class="accent small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
                     <button *ngIf="doc.status !== 'archived'" class="secondary small" (click)="archiveDocument(doc, $event)">Archive</button>
                     <button *ngIf="doc.status === 'archived'" class="secondary small" (click)="unarchive(doc, $event)">Unarchive</button>
-                    <button class="danger small glow" (click)="deleteDocument(doc, $event)">Delete</button>
+                    <div class="delete-action-wrapper">
+                      <button *ngIf="deleteConfirmId() !== doc.id" class="danger small glow" (click)="initiateDelete(doc, $event)">Delete</button>
+                      <div *ngIf="deleteConfirmId() === doc.id" class="delete-confirm-inline">
+                        <span class="delete-confirm-text">Delete this file?</span>
+                        <button class="danger small glow" (click)="confirmDelete($event)">Yes</button>
+                        <button class="secondary small" (click)="cancelDelete($event)">No</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
                 <div *ngIf="editingDocId() === doc.id" class="edit-form">
+                  <div class="form-group">
+                    <label>Filename</label>
+                    <input [(ngModel)]="editForm().filename" placeholder="filename.pdf">
+                  </div>
                   <div class="form-group">
                     <label>Due Date</label>
                     <input [(ngModel)]="editForm().date" placeholder="DD.MM.YYYY">

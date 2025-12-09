@@ -51,13 +51,50 @@
   }
 }
 
+@keyframes fileOpening {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes buttonPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+}
+
+@keyframes slideDown {
+  0% {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    max-height: 1000px;
+    transform: translateY(0);
+  }
+}
+
 .invoice-list-container {
   position: relative;
 }
 
 /* Only animate on initial page load */
 .invoice-list-container.initial-load {
-  animation: fadeIn 0.3s ease-in;
+  animation: fadeIn 0.6s ease-in;
 }
 
 .invoice-list-container.initial-load .invoice-table-container {
@@ -145,15 +182,50 @@
   margin-top: 1rem;
 }
 
-.modal-actions {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1.5rem;
-  justify-content: center;
+/* Inline delete confirmation */
+.delete-action-wrapper {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 280px;
+  min-width: 280px;
 }
 
-.modal-actions button {
-  flex: 1;
+.delete-action-wrapper > button {
+  /* Ensure delete button maintains standard button size */
+  display: inline-block;
+}
+
+.delete-confirm-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  animation: slideInRight 0.2s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.delete-confirm-text {
+  font-size: 0.875rem;
+  color: #991b1b;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.delete-confirm-inline button {
+  margin: 0;
 }
 
 .toast {
@@ -465,6 +537,14 @@ button:active,
   border-bottom: 1px solid var(--divider-color);
 }
 
+.detail-row.just-expanded {
+  animation: slideDown 0.4s ease-out;
+}
+
+.detail-row.just-expanded .detail-content {
+  animation: fadeIn 0.5s ease-in;
+}
+
 .detail-content {
   padding: 1.5rem;
   border-left: 4px solid var(--primary-color);
@@ -626,6 +706,12 @@ button:active,
   gap: 0.5rem;
 }
 
+.detail-actions button.opening-file {
+  animation: buttonPulse 0.6s ease-in-out;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
 .edit-form {
   background: white;
   padding: 1rem;
@@ -641,6 +727,8 @@ button:active,
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  flex: 1;
+  min-width: 150px;
 }
 
 .form-group label {

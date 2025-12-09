@@ -27,7 +27,7 @@ class Document(Base):
     content_type = Column(String(50), nullable=False)
     file_size_bytes = Column(String, nullable=True)
     storage_path = Column(String(500), nullable=True)
-    status = Column(SQLEnum(DocumentStatus), default=DocumentStatus.PENDING, nullable=False)
+    status = Column(SQLEnum(DocumentStatus), default=DocumentStatus.SAVED, nullable=False)
     
     # Extracted data
     extracted_text = Column(Text, nullable=True)

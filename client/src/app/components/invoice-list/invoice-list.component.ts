@@ -48,7 +48,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   private searchSubject = new Subject<string>();
   
   editingDocId = signal<string | null>(null);
-  editForm = signal<{ date: string; amount: string }>({ date: '', amount: '' });
+  editForm = signal<{ filename: string; date: string; amount: string }>({ filename: '', date: '', amount: '' });
   
   // QR Code data URLs mapped by document ID
   qrCodeUrls = signal<Map<string, string>>(new Map());
@@ -58,9 +58,14 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // UI feedback toasts
   toasts = signal<ToastMessage[]>([]);
   
-  // Delete confirmation modal
-  showDeleteModal = signal<boolean>(false);
-  deleteModalDocument = signal<DocumentItem | null>(null);
+  // Delete confirmation - track which document is awaiting confirmation
+  deleteConfirmId = signal<string | null>(null);
+  
+  // Track which file is being opened for animation
+  openingFileId = signal<string | null>(null);
+  
+  // Track which row just expanded for one-time animation
+  justExpandedDocId = signal<string | null>(null);
   
   // Track initial page load for animation (signal for template binding)
   hasInitiallyLoaded = signal<boolean>(false);
@@ -210,8 +215,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           if (!this.animationHasPlayed && merged.length > 0) {
             this.animationHasPlayed = true;
             this.hasInitiallyLoaded.set(true);
-            // Remove the animation class after it completes to prevent re-triggering
-            setTimeout(() => this.hasInitiallyLoaded.set(false), 1000);
+            // Remove the animation class after all animations complete (quite important lol)
+            setTimeout(() => this.hasInitiallyLoaded.set(false), 1500);
           }
         }
 
@@ -385,14 +390,17 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return ext;
   }
 
-  deleteDocument(doc: DocumentItem, event: Event) {
+  initiateDelete(doc: DocumentItem, event: Event) {
     event.stopPropagation();
-    this.deleteModalDocument.set(doc);
-    this.showDeleteModal.set(true);
+    this.deleteConfirmId.set(doc.id);
   }
 
-  confirmDelete() {
-    const doc = this.deleteModalDocument();
+  confirmDelete(event: Event) {
+    event.stopPropagation();
+    const docId = this.deleteConfirmId();
+    if (!docId) return;
+    
+    const doc = this.documents().find(d => d.id === docId);
     if (!doc) return;
     
     this.documentService.delete(doc.id).subscribe({
@@ -404,18 +412,18 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         });
         this.documents.update(docs => docs.filter(d => d.id !== doc.id));
         this.triggerToast('File deleted', { background: '#ef4444', color: '#ffffff', sound: 'error' });
-        this.cancelDelete();
+        this.cancelDelete(event);
       },
       error: () => {
         this.triggerToast('Failed to delete document', { background: '#ef4444', color: '#ffffff', sound: 'error' });
-        this.cancelDelete();
+        this.cancelDelete(event);
       }
     });
   }
 
-  cancelDelete() {
-    this.showDeleteModal.set(false);
-    this.deleteModalDocument.set(null);
+  cancelDelete(event: Event) {
+    event.stopPropagation();
+    this.deleteConfirmId.set(null);
   }
 
   onSearch(event: Event): void {
@@ -494,8 +502,12 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (this.editingDocId()) return; // Prevent toggling while editing
     if (this.expandedDocId() === doc.id) {
       this.expandedDocId.set(null);
+      this.justExpandedDocId.set(null);
     } else {
       this.expandedDocId.set(doc.id);
+      // Set animation flag and clear it after animation completes
+      this.justExpandedDocId.set(doc.id);
+      setTimeout(() => this.justExpandedDocId.set(null), 500);
       // Generate QR code when expanding row
       if (doc.qr_code_data && !this.qrCodeUrls().has(doc.id)) {
         this.generateQRCode(doc.id, doc.qr_code_data);
@@ -507,6 +519,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     this.editingDocId.set(doc.id);
     this.editForm.set({
+      filename: doc.filename,
       date: this.deriveInvoiceDate(doc),
       amount: this.deriveAmount(doc)
     });
@@ -522,6 +535,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   saveEdit(doc: DocumentItem, event: Event): void {
     event.stopPropagation();
     const updates = {
+      filename: this.editForm().filename,
       confirmed_due_date: this.editForm().date,
       confirmed_amount: this.editForm().amount,
       processed_at: this.formatLocalDateTime(new Date())
@@ -541,6 +555,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   markAsPaid(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
+    this.justExpandedDocId.set(null); // Prevent animation on status change
     this.documentService.update(doc.id, { 
       status: 'paid',
       processed_at: new Date().toISOString()
@@ -556,6 +571,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   archiveDocument(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
+    this.justExpandedDocId.set(null); // Prevent animation on status change
     this.documentService.update(doc.id, { 
       status: 'archived',
       processed_at: new Date().toISOString()
@@ -577,6 +593,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // Allow marking a document as unpaid (revert to processed/unpaid state).
   markAsUnpaid(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
+    this.justExpandedDocId.set(null); // Prevent animation on status change
     this.documentService.update(doc.id, { 
       status: 'processed',
       processed_at: new Date().toISOString()
@@ -593,6 +610,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // Allow unarchiving a document (revert to paid state).
   unarchive(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
+    this.justExpandedDocId.set(null); // Prevent animation on status change
     this.documentService.update(doc.id, { 
       status: 'paid',
       processed_at: new Date().toISOString()
@@ -616,17 +634,29 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.documents.update(docs => docs.map(d => d.id === docId ? { ...updatedDoc, processed_at: ts } : d));
   }
 
-  viewPdf(doc: DocumentItem, event?: Event): void {
+  viewFile(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
-    if (doc.status !== 'processed') return;
+    
+    // Trigger opening animation
+    this.openingFileId.set(doc.id);
     
     this.documentService.download(doc.id).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
+        // Remove animation after file opens
+        setTimeout(() => this.openingFileId.set(null), 600);
       },
-      error: () => this.triggerToast('Failed to open PDF', { background: '#ef4444', color: '#ffffff', sound: 'error' })
+      error: () => {
+        this.openingFileId.set(null);
+        this.triggerToast('Failed to open file', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+      }
     });
+  }
+
+  // Alias for backward compatibility
+  viewPdf(doc: DocumentItem, event?: Event): void {
+    this.viewFile(doc, event);
   }
 
   ngOnDestroy(): void {
@@ -851,9 +881,13 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   showUnpaidLabel(doc: DocumentItem): boolean {
-    // Show Unpaid label for 'processed' or 'saved' status documents
-    // This includes documents that have been manually marked as unpaid
-    return doc.status === 'processed' || doc.status === 'saved';
+    // Show Unpaid label only for documents that are NOT paid and NOT archived
+    // and have extracted data (processed or saved with data)
+    if (doc.status === 'paid' || doc.status === 'archived') {
+      return false;
+    }
+    // Show for processed status, or saved status with extracted data
+    return doc.status === 'processed' || (doc.status === 'saved' && this.hasExtractedData(doc));
   }
 
   getQRCodeUrl(docId: string): string | undefined {
