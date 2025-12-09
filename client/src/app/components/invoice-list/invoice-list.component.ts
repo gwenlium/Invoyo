@@ -6,6 +6,7 @@ import { Subject, timer, of } from 'rxjs';
 import { switchMap, takeUntil, catchError, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { DocumentService } from '../../services/document.service';
 import { DocumentItem } from '../../models/document.model';
+import { QRCodeModule } from 'angularx-qrcode';
 
 type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'uploaded' | 'processed';
 
@@ -14,7 +15,7 @@ type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'u
   templateUrl: './invoice-list.component.html',
   styleUrls: ['./invoice-list.component.css'],
   standalone: true,
-  imports: [CommonModule, FormsModule]
+  imports: [CommonModule, FormsModule, QRCodeModule]
 })
 export class InvoiceListComponent implements OnInit, OnDestroy {
   documents = signal<DocumentItem[]>([]);
@@ -290,8 +291,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     });
   }
 
-  markAsPaid(doc: DocumentItem, event: Event): void {
-    event.stopPropagation();
+  markAsPaid(doc: DocumentItem, event?: Event): void {
+    if (event) event.stopPropagation();
     this.documentService.update(doc.id, { status: 'paid' }).subscribe({
       next: (updatedDoc) => {
         this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
@@ -300,13 +301,29 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     });
   }
 
-  archiveDocument(doc: DocumentItem, event: Event): void {
-    event.stopPropagation();
+  archiveDocument(doc: DocumentItem, event?: Event): void {
+    if (event) event.stopPropagation();
     this.documentService.update(doc.id, { status: 'archived' }).subscribe({
       next: (updatedDoc) => {
         this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
       },
       error: (err) => console.error('Failed to archive document', err)
+    });
+  }
+
+  // Template expects `archive(doc, $event)`; provide a thin wrapper to match name.
+  archive(doc: DocumentItem, event?: Event): void {
+    this.archiveDocument(doc, event);
+  }
+
+  // Allow marking a document as unpaid (revert to processed/unpaid state).
+  markAsUnpaid(doc: DocumentItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.documentService.update(doc.id, { status: 'processed' }).subscribe({
+      next: (updatedDoc) => {
+        this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+      },
+      error: (err) => console.error('Failed to mark as unpaid', err)
     });
   }
 
