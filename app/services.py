@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from .models import Document, DocumentStatus
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ class DocumentService:
             id=doc_id,
             filename=filename,
             content_type=content_type,
-            status=DocumentStatus.PENDING,
+            status=DocumentStatus.SAVED,
             uploaded_by_user_id=user_id,
         )
         db.add(document)
@@ -168,11 +169,24 @@ class DocumentService:
         for key, value in updates.items():
             if hasattr(document, key):
                 setattr(document, key, value)
+        # Always track user modifications with a fresh timestamp
+        document.processed_at = datetime.utcnow()
         
         db.commit()
         db.refresh(document)
         logger.info(f"Updated document metadata for {doc_id}")
         return document
+
+    @staticmethod
+    def delete_document(db: Session, doc_id: str) -> bool:
+        """Delete document record from database."""
+        document = db.query(Document).filter(Document.id == doc_id).first()
+        if not document:
+            return False
+        db.delete(document)
+        db.commit()
+        logger.info(f"Deleted document record {doc_id}")
+        return True
 
 class FileStorageService:
     """Handle file storage operations using local filesystem."""
@@ -198,6 +212,18 @@ class FileStorageService:
             with open(file_path, "rb") as f:
                 return f.read()
         return None
+
+    def delete(self, file_id: str) -> bool:
+        """Remove stored file if it exists."""
+        file_path = self.storage_dir / file_id
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                logger.info(f"Deleted stored file: {file_id}")
+                return True
+            except Exception as exc:
+                logger.warning(f"Failed to delete file {file_id}: {exc}")
+        return False
     
     def delete(self, file_id: str) -> bool:
         """Delete file from storage."""
@@ -223,24 +249,34 @@ async def process_document_logic(
     Main processing logic:
     1. Extract text using OCR
     2. Update document in database
-    3. Handle errors gracefully
+    3. For 'saved' status documents, keep them in 'saved' state (user decides when to mark as paid/unpaid)
+    4. Handle errors gracefully
     """
     try:
+        # Get current document to check its status
+        current_doc = db.query(Document).filter(Document.id == file_id).first()
+        if not current_doc:
+            raise ValueError(f"Document {file_id} not found")
+        
         # Extract text
         extraction_result = await ocr_service.extract_text(file_content, content_type)
+        
+        # If document is in 'saved' status, keep it there and just update the extracted data
+        # Otherwise update to PROCESSED as normal
+        new_status = current_doc.status if current_doc.status == DocumentStatus.SAVED else DocumentStatus.PROCESSED
         
         # Update database
         document_service.update_document_processing(
             db,
             file_id,
-            DocumentStatus.PROCESSED,
+            new_status,
             extracted_text=extraction_result["extracted_text"],
             qr_code_data=extraction_result["qr_code_data"],
             qr_code_base64=extraction_result.get("qr_code_base64"),
             confidence_score=extraction_result["confidence_score"]
         )
         
-        logger.info(f"Successfully processed document: {file_id}")
+        logger.info(f"Successfully processed document: {file_id} (status: {new_status})")
         return extraction_result
         
     except Exception as e:

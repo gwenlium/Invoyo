@@ -16,6 +16,7 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"
     PAID = "paid"
     ARCHIVED = "archived"
+    SAVED = "saved"
 
 class Document(Base):
     """Stores document metadata."""

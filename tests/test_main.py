@@ -1,4 +1,4 @@
-"""Integration tests for the Invoice Processor API."""
+"""Integration tests for the Invoyo API."""
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app

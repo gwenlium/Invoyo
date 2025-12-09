@@ -8,13 +8,13 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Application
-    app_name: str = "Invoice Processor"
+    app_name: str = "Invoyo"
     environment: str = "development"  # development, staging, production
     api_version: str = "v1"
     
     # Database
     database_url: str = Field(
-        default="postgresql://user:password@db:5432/invoiceprocessor",
+        default="postgresql://user:password@db:5432/invoyo",
         env="DATABASE_URL",
     )
     database_pool_size: int = 10
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     database_pool_recycle: int = 3600
     
     # Security
-    secret_key: str = "your-secret-key-change-in-production"  # MUST be in .env
+    secret_key: str = "CHANGE-THIS-IN-PRODUCTION-USE-ENV-FILE"  # MUST be set in .env for production
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     

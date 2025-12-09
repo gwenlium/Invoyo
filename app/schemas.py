@@ -12,6 +12,7 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"
     PAID = "paid"
     ARCHIVED = "archived"
+    SAVED = "saved"
 
 class DocumentResponse(BaseModel):
     """API response for document metadata and extraction."""

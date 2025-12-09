@@ -1,6 +1,7 @@
 """FastAPI application with security, database, and error handling."""
 import uuid
 import logging
+import asyncio
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Request
 from fastapi.responses import JSONResponse, Response
@@ -21,6 +22,7 @@ from .logging_config import configure_logging, log_audit_event
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 
 # Configure logging
 settings = get_settings()
@@ -29,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize app
 app = FastAPI(
-    title="Invoice Storer API",
+    title="Invoyo API",
     version="1.0.0",
     description="Store, parse, and track invoices with OCR extraction"
 )
@@ -52,6 +54,37 @@ async def startup_event():
     try:
         init_db()
         logger.info("Database initialized successfully")
+        
+        # Run migrations - Add SAVED to documentstatus enum
+        from .database import engine
+        try:
+            # Use raw connection to execute ALTER TYPE with AUTOCOMMIT
+            conn = engine.raw_connection()
+            try:
+                # Set isolation level to 0 for AUTOCOMMIT
+                original_isolation = conn.isolation_level
+                conn.set_isolation_level(0)
+                try:
+                    cursor = conn.cursor()
+                    try:
+                        # Try to add 'saved' value to enum
+                        cursor.execute("ALTER TYPE documentstatus ADD VALUE 'saved';")
+                        logger.info("Added 'saved' value to documentstatus enum")
+                    except Exception as enum_err:
+                        error_msg = str(enum_err).lower()
+                        if "already exists" in error_msg or "duplicate" in error_msg:
+                            logger.info("'saved' value already exists in documentstatus enum")
+                        else:
+                            logger.warning(f"Could not add 'saved' to enum: {enum_err}")
+                    finally:
+                        cursor.close()
+                finally:
+                    conn.set_isolation_level(original_isolation)
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning(f"Migration error: {e}")
+                    
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}", exc_info=True)
         raise
@@ -121,33 +154,35 @@ async def upload_document(
         # Store file
         file_storage_service.save(file_id, content)
         
-        # Process document
-        try:
-            extraction_result = await process_document_logic(
-                db,
-                file_id,
-                content,
-                file.content_type
-            )
-            log_audit_event(
-                "document_processed",
-                user_id=user_id,
-                resource_id=file_id,
-                action="process",
-                status="success"
-            )
-        except Exception as e:
-            logger.error(f"OCR processing failed: {e}")
-            document_service.update_document_processing(
-                db,
-                file_id,
-                DocumentStatus.FAILED,
-                error_message=str(e)
-            )
-            # Don't raise - return error in response
+        # Process document asynchronously (fire and forget)
+        async def process_in_background():
+            try:
+                extraction_result = await process_document_logic(
+                    db,
+                    file_id,
+                    content,
+                    file.content_type
+                )
+                log_audit_event(
+                    "document_processed",
+                    user_id=user_id,
+                    resource_id=file_id,
+                    action="process",
+                    status="success"
+                )
+            except Exception as e:
+                logger.error(f"OCR processing failed: {e}")
+                document_service.update_document_processing(
+                    db,
+                    file_id,
+                    DocumentStatus.FAILED,
+                    error_message=str(e)
+                )
         
-        # Fetch updated document
-        document = document_service.get_document(db, file_id)
+        # Schedule background processing
+        asyncio.create_task(process_in_background())
+        
+        # Return document with 'saved' status immediately
         return document.to_dict()
         
     except Exception as e:
@@ -323,13 +358,49 @@ async def update_document(
         # Let's be strict for consistency.
         pass
 
+    update_data = updates.dict(exclude_unset=True)
+    update_data["processed_at"] = datetime.utcnow()
+
     updated_doc = document_service.update_document_metadata(
-        db, 
-        document_id, 
-        updates.dict(exclude_unset=True)
+        db,
+        document_id,
+        update_data
     )
     
     return updated_doc.to_dict()
+
+@app.delete(
+    "/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a document"
+)
+async def delete_document(
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a document and its stored file."""
+    user_id = current_user.get("user_id")
+
+    document = document_service.get_document(db, document_id)
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if document.uploaded_by_user_id and document.uploaded_by_user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this document")
+
+    document_service.delete_document(db, document_id)
+    file_storage_service.delete(document_id)
+
+    log_audit_event(
+        "document_deleted",
+        user_id=user_id,
+        resource_id=document_id,
+        action="delete",
+        status="success"
+    )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # =====================
 # AUTHENTICATION
@@ -340,10 +411,15 @@ async def login(username: str, password: str):
     """
     Get JWT access token for API authentication.
     
-    In production, validate credentials against user database.
+    ⚠️ WARNING: This is a DEMO endpoint that accepts any credentials!
+    In production, you MUST implement proper authentication:
+    - Validate username/password against database
+    - Use password hashing (bcrypt/argon2)
+    - Implement rate limiting
+    - Add account lockout after failed attempts
     """
-    # TODO: Validate username/password against database
-    # For demo, accept any credentials
+    # TODO: SECURITY - Validate username/password against database
+    # Currently accepts ANY credentials for demo purposes
     
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
