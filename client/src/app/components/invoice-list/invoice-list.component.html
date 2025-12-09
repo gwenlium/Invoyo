@@ -1,3 +1,15 @@
+<div class="delete-modal-backdrop" *ngIf="showDeleteModal()" (click)="cancelDelete()">
+  <div class="delete-modal" (click)="$event.stopPropagation()">
+    <h3>Delete File?</h3>
+    <p>{{ deleteModalDocument()?.filename }}</p>
+    <p class="modal-warning">This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="secondary small glow" (click)="cancelDelete()">Cancel</button>
+      <button class="danger small glow" (click)="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container">
   <div
     *ngFor="let toast of toasts()"
@@ -49,6 +61,7 @@
       <thead>
         <tr>
           <th (click)="sortBy('filename')">File <span class="sort-icon" *ngIf="sortColumn() === 'filename'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th>File Type</th>
           <th (click)="sortBy('state')">Status <span class="sort-icon" *ngIf="sortColumn() === 'state'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
           <th (click)="sortBy('date')">Due Date <span class="sort-icon" *ngIf="sortColumn() === 'date'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
           <th (click)="sortBy('amount')">Amount <span class="sort-icon" *ngIf="sortColumn() === 'amount'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
@@ -63,10 +76,13 @@
               <span class="chevron" [class.rotated]="expandedDocId() === doc.id">▶</span>
               {{ doc.filename }}
             </td>
+            <td>{{ getFileType(doc.filename) }}</td>
             <td>
               <div class="status-container">
-                <span *ngIf="doc.status === 'paid' || doc.status === 'archived'" class="status" [ngClass]="statusClass(doc.status)">{{ statusLabel(doc.status) }}</span>
+                <span *ngIf="doc.status === 'paid'" class="status status-paid">Paid</span>
+                <span *ngIf="doc.status === 'saved'" class="status status-saved">Saved</span>
                 <span *ngIf="showUnpaidLabel(doc)" class="status status-unpaid">Unpaid</span>
+                <span *ngIf="doc.status === 'archived'" class="status status-archived">Archived</span>
               </div>
             </td>
             <td>{{ deriveInvoiceDate(doc) }}</td>
@@ -75,7 +91,7 @@
             <td>{{ doc.processed_at ? (doc.processed_at | date:'dd.MM.yyyy HH:mm') : '—' }}</td>
           </tr>
           <tr *ngIf="expandedDocId() === doc.id" class="detail-row">
-            <td colspan="6">
+            <td colspan="7">
               <div class="detail-content">
                 <div class="detail-header">
                   <h3>{{ doc.filename }}</h3>
@@ -83,7 +99,7 @@
                     <button *ngIf="editingDocId() !== doc.id" class="ghost small glow" (click)="startEdit(doc, $event)">Edit Details</button>
                     <button class="ghost small glow" (click)="viewPdf(doc, $event)">View Original PDF</button>
                     <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small glow" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
-                    <button *ngIf="doc.status === 'paid'" class="accent small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
+                    <button *ngIf="doc.status === 'paid' || doc.status === 'saved'" class="accent small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
                     <button *ngIf="doc.status !== 'archived'" class="secondary small" (click)="archiveDocument(doc, $event)">Archive</button>
                     <button *ngIf="doc.status === 'archived'" class="secondary small" (click)="unarchive(doc, $event)">Unarchive</button>
                     <button class="danger small glow" (click)="deleteDocument(doc, $event)">Delete</button>
@@ -100,8 +116,8 @@
                     <input [(ngModel)]="editForm().amount" placeholder="0.00">
                   </div>
                   <div class="edit-actions">
-                    <button class="primary small" (click)="saveEdit(doc, $event)">Save</button>
-                    <button class="ghost small" (click)="cancelEdit($event)">Cancel</button>
+                    <button class="primary small glow" (click)="saveEdit(doc, $event)">Save</button>
+                    <button class="secondary small glow" (click)="cancelEdit($event)">Cancel</button>
                   </div>
                 </div>
 

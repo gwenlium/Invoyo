@@ -60,6 +60,56 @@
   z-index: 1000;
 }
 
+.delete-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.delete-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 400px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.3);
+  text-align: center;
+  animation: slideIn 0.3s ease-out;
+}
+
+.delete-modal h3 {
+  margin: 0 0 0.5rem 0;
+  color: #1f2937;
+  font-size: 1.2rem;
+}
+
+.delete-modal p {
+  margin: 0.5rem 0;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.modal-warning {
+  color: #ef4444;
+  font-weight: 500;
+  margin-top: 1rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  justify-content: center;
+}
+
+.modal-actions button {
+  flex: 1;
+}
+
 .toast {
   display: flex;
   align-items: center;
@@ -153,13 +203,13 @@ button:active,
 }
 
 .secondary {
-  background-color: #9ca3af;
+  background-color: #3b82f6;
   color: #ffffff;
-  border-color: #9ca3af;
+  border-color: #3b82f6;
 }
 
 .secondary:hover {
-  background-color: #6b7280;
+  background-color: #2563eb;
 }
 
 .danger {
@@ -196,6 +246,14 @@ button:active,
 
 .primary.glow:hover {
   box-shadow: 0 12px 32px rgba(34, 197, 94, 0.36);
+}
+
+.secondary.glow {
+  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.25);
+}
+
+.secondary.glow:hover {
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.32);
 }
 
 .danger.glow {
@@ -295,9 +353,15 @@ button:active,
 }
 
 .status-archived {
-  background-color: #6b7280;
+  background-color: #3b82f6;
   color: #ffffff;
-  box-shadow: 0 10px 25px rgba(148, 163, 184, 0.28);
+  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.28);
+}
+
+.status-saved {
+  background-color: #8b5cf6;
+  color: #ffffff;
+  box-shadow: 0 10px 25px rgba(139, 92, 246, 0.28);
 }
 
 
@@ -593,8 +657,10 @@ button:active,
 }
 
 .tab-all.active {
-  background: #6366f1;
-  box-shadow: 0 10px 25px rgba(99, 102, 241, 0.28);
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  border-color: #e5e7eb;
 }
 
 .tab-unpaid.active {
@@ -608,8 +674,8 @@ button:active,
 }
 
 .tab-archived.active {
-  background: #6b7280;
-  box-shadow: 0 10px 25px rgba(107, 114, 128, 0.25);
+  background: #3b82f6;
+  box-shadow: 0 10px 25px rgba(59, 130, 246, 0.28);
 }
 
 .qr-data {

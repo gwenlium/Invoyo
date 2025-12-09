@@ -57,6 +57,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   // UI feedback toasts
   toasts = signal<ToastMessage[]>([]);
+  
+  // Delete confirmation modal
+  showDeleteModal = signal<boolean>(false);
+  deleteModalDocument = signal<DocumentItem | null>(null);
 
   private readonly dueKeywords = [
     'due date',
@@ -357,9 +361,20 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     return parseFloat(clean) || 0;
   }
 
+  getFileType(filename: string): string {
+    const ext = filename.split('.').pop()?.toUpperCase() || 'Unknown';
+    return ext;
+  }
+
   deleteDocument(doc: DocumentItem, event: Event) {
     event.stopPropagation();
-    if (!confirm(`Are you sure you want to delete ${doc.filename}?`)) return;
+    this.deleteModalDocument.set(doc);
+    this.showDeleteModal.set(true);
+  }
+
+  confirmDelete() {
+    const doc = this.deleteModalDocument();
+    if (!doc) return;
     
     this.documentService.delete(doc.id).subscribe({
       next: () => {
@@ -370,9 +385,18 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         });
         this.documents.update(docs => docs.filter(d => d.id !== doc.id));
         this.triggerToast('File deleted', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+        this.cancelDelete();
       },
-      error: () => this.triggerToast('Failed to delete document', { background: '#ef4444', color: '#ffffff', sound: 'error' })
+      error: () => {
+        this.triggerToast('Failed to delete document', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+        this.cancelDelete();
+      }
     });
+  }
+
+  cancelDelete() {
+    this.showDeleteModal.set(false);
+    this.deleteModalDocument.set(null);
   }
 
   onSearch(event: Event): void {
@@ -520,7 +544,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Archived', { background: '#9ca3af', color: '#ffffffff', sound: 'info' });
+        this.triggerToast('Archived', { background: '#3b82f6', color: '#ffffff', sound: 'info' });
       },
       error: () => this.triggerToast('Failed to archive document', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
@@ -557,7 +581,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Unarchived', { background: '#9ca3af', color: '#ffffffff', sound: 'info' });
+        this.triggerToast('Unarchived', { background: '#3b82f6', color: '#ffffff', sound: 'info' });
       },
       error: () => this.triggerToast('Failed to unarchive', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
@@ -612,6 +636,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         return 'status-paid';
       case 'archived':
         return 'status-archived';
+      case 'saved':
+        return 'status-saved';
       case 'processed':
         return 'status-modified';
       case 'processing':
@@ -625,6 +651,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   statusLabel(status: DocumentItem['status']): string {
+    if (status === 'saved') return 'Saved';
     if (status === 'processed') return 'Modified';
     if (status === 'paid') return 'Paid';
     if (status === 'archived') return 'Archived';
