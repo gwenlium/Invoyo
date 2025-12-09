@@ -1,5 +1,10 @@
 <div class="toast-container">
-  <div *ngFor="let toast of toasts()" class="toast" [ngClass]="toast.tone">
+  <div
+    *ngFor="let toast of toasts()"
+    class="toast"
+    [style.background-color]="toast.background"
+    [style.color]="toast.color"
+  >
     <span>{{ toast.message }}</span>
     <button type="button" class="toast-close" (click)="dismissToast(toast.id, $event)" aria-label="Dismiss">×</button>
   </div>
@@ -75,7 +80,7 @@
                     <button *ngIf="editingDocId() !== doc.id" class="ghost small" (click)="startEdit(doc, $event)">Edit Details</button>
                     <button class="ghost small" (click)="viewPdf(doc, $event)">View Original PDF</button>
                     <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
-                    <button *ngIf="doc.status === 'paid'" class="primary small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
+                    <button *ngIf="doc.status === 'paid'" class="accent small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
                     <button *ngIf="doc.status === 'paid'" class="secondary small" (click)="archiveDocument(doc, $event)">Archive</button>
                     <button *ngIf="doc.status === 'archived'" class="secondary small" (click)="unarchive(doc, $event)">Unarchive</button>
                     <button class="danger small" (click)="deleteDocument(doc, $event)">Delete</button>

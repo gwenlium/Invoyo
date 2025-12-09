@@ -13,7 +13,8 @@ type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'u
 interface ToastMessage {
   id: number;
   message: string;
-  tone: 'success' | 'info' | 'error';
+  background: string;
+  color: string;
 }
 
 @Component({
@@ -223,9 +224,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           return next;
         });
         this.documents.update(docs => docs.filter(d => d.id !== doc.id));
-        this.triggerToast('Document deleted', 'success');
+        this.triggerToast('Document deleted', { background: '#ef4444', color: '#ffffff', sound: 'error' });
       },
-      error: () => this.triggerToast('Failed to delete document', 'error')
+      error: () => this.triggerToast('Failed to delete document', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
   }
 
@@ -263,13 +264,13 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           
           // Clear success message after 3s
           setTimeout(() => this.uploadMessage.set(''), 3000);
-          this.triggerToast('Document uploaded', 'success');
+          this.triggerToast('Document uploaded', { background: '#22c55e', color: '#ffffff', sound: 'success' });
         }
       },
       error: (err) => {
         this.error.set(err?.error?.detail || 'Upload failed');
         this.isUploading.set(false);
-        this.triggerToast('Upload failed', 'error');
+        this.triggerToast('Upload failed', { background: '#ef4444', color: '#ffffff', sound: 'error' });
       },
     });
   }
@@ -323,9 +324,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         // Update local state and stamp modified
         this.setClientModified(stamped.id, stamped);
         this.editingDocId.set(null);
-        this.triggerToast('Invoice details saved', 'success');
+        this.triggerToast('Invoice details saved', { background: '#22c55e', color: '#ffffff', sound: 'success' });
       },
-      error: () => this.triggerToast('Failed to save invoice details', 'error')
+      error: () => this.triggerToast('Failed to save invoice details', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
   }
 
@@ -338,9 +339,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Marked as paid', 'success');
+        this.triggerToast('Marked as paid', { background: '#22c55e', color: '#ffffff', sound: 'success' });
       },
-      error: () => this.triggerToast('Failed to mark as paid', 'error')
+      error: () => this.triggerToast('Failed to mark as paid', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
   }
 
@@ -353,9 +354,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Moved to archive', 'info');
+        this.triggerToast('Archived', { background: '#9ca3af', color: '#ffffffff', sound: 'info' });
       },
-      error: () => this.triggerToast('Failed to archive document', 'error')
+      error: () => this.triggerToast('Failed to archive document', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
   }
 
@@ -374,9 +375,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Marked as unpaid', 'info');
+        this.triggerToast('Marked as unpaid', { background: '#f97316', color: '#ffffff', sound: 'info' });
       },
-      error: () => this.triggerToast('Failed to mark as unpaid', 'error')
+      error: () => this.triggerToast('Failed to mark as unpaid', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
   }
 
@@ -390,9 +391,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Unarchived', 'info');
+        this.triggerToast('Unarchived', { background: '#9ca3af', color: '#111827', sound: 'info' });
       },
-      error: () => this.triggerToast('Failed to unarchive', 'error')
+      error: () => this.triggerToast('Failed to unarchive', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
   }
 
@@ -415,7 +416,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
       },
-      error: () => this.triggerToast('Failed to open PDF', 'error')
+      error: () => this.triggerToast('Failed to open PDF', { background: '#ef4444', color: '#ffffff', sound: 'error' })
     });
   }
 
@@ -536,12 +537,17 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     }
   }
 
-  private triggerToast(message: string, tone: 'success' | 'info' | 'error' = 'info'): void {
+  private triggerToast(
+    message: string,
+    palette: { background?: string; color?: string; sound?: 'success' | 'info' | 'error' } = {}
+  ): void {
     const id = ++this.toastIdCounter;
-    this.toasts.update(list => [...list, { id, message, tone }]);
+    const background = palette.background ?? '#2563eb';
+    const color = palette.color ?? '#ffffff';
+    this.toasts.update(list => [...list, { id, message, background, color }]);
     const timeoutId = setTimeout(() => this.removeToast(id), 3500);
     this.toastTimers.set(id, timeoutId);
-    this.playToastSound(tone);
+    this.playToastSound(palette.sound ?? 'info');
   }
 
   private removeToast(id: number): void {

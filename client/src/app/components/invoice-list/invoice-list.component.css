@@ -46,18 +46,6 @@
   animation: slideIn 0.25s ease-out;
 }
 
-.toast.info {
-  background: #2563eb;
-}
-
-.toast.success {
-  background: #16a34a;
-}
-
-.toast.error {
-  background: #dc2626;
-}
-
 .toast-close {
   border: none;
   background: transparent;
@@ -119,6 +107,16 @@ button:active,
   background-color: #22c55e;
   color: white;
   border-color: #22c55e;
+}
+
+.accent {
+  background-color: #f97316;
+  color: #ffffff;
+  border-color: #f97316;
+}
+
+.accent:hover {
+  background-color: #ea580c;
 }
 
 .secondary {
@@ -212,11 +210,8 @@ button:active,
 }
 
 .status-modified { background-color: #dcfce7; color: #16a34a; }
-.status-paid { background-color: #2f9f5a; color: #ffffff; }
-.status-archived { background-color: #f3f4f6; color: #4b5563; }
-.status-processing { background-color: #fef3c7; color: #d97706; }
-.status-pending { background-color: #e0f2fe; color: #0369a1; }
-.status-failed { background-color: #d32f2f; }
+.status-paid { background-color: #2f9f72; color: #ffffff; }
+.status-archived { background-color: #6b7280; color: #ffffff; }
 
 .invoice-table th {
   font-weight: 500;
@@ -422,7 +417,7 @@ button:active,
 }
 
 .tab-paid.active {
-  background: #16a34a;
+  background: #2f9f72;
   box-shadow: 0 10px 25px rgba(22, 163, 74, 0.25);
 }
 
@@ -482,6 +477,6 @@ button:active,
 }
 
 .status-unpaid {
-  background-color: #ef4444;
+  background-color: #f97316;
   color: #fff;
 }
