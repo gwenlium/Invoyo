@@ -1,5 +1,71 @@
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .invoice-list-container {
   animation: fadeIn 1s ease-in;
+}
+
+.toast-container {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 1000;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 220px;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 0.9rem;
+  box-shadow: 0 20px 35px rgba(15, 23, 42, 0.15);
+  animation: slideIn 0.25s ease-out;
+}
+
+.toast.info {
+  background: #2563eb;
+}
+
+.toast.success {
+  background: #16a34a;
+}
+
+.toast.error {
+  background: #dc2626;
+}
+
+.toast-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
 }
 
 .header-row {
@@ -55,6 +121,16 @@ button:active,
   border-color: #22c55e;
 }
 
+.secondary {
+  background-color: #9ca3af;
+  color: #ffffff;
+  border-color: #9ca3af;
+}
+
+.secondary:hover {
+  background-color: #6b7280;
+}
+
 .danger {
   background-color: #ef4444;
   color: white;
@@ -66,19 +142,16 @@ button:active,
   border-color: #ccc;
 }
 
-.btn-blue {
-  background-color: #3b82f6;
-  color: white;
-  border-color: #3b82f6;
-}
-
 .upload-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   cursor: pointer;
   background: #2fa84f;
   color: #fff;
+  padding: 0.5rem 1.25rem;
+  font-weight: 500;
 }
 .upload-btn input[type="file"] {
   display: none;
@@ -138,21 +211,12 @@ button:active,
   letter-spacing: 0.5px;
 }
 
-.status-saved { background-color: #81c784; color: #ffffff; }
-.status-paid { background-color: #2e7d32; color: #ffffff } 
-.status-archived { background-color: #78909c; color: #ffffff; } 
-.status-processing { background-color: #ffa000; }
-.status-pending { background-color: #90a4ae; }
+.status-modified { background-color: #dcfce7; color: #16a34a; }
+.status-paid { background-color: #2f9f5a; color: #ffffff; }
+.status-archived { background-color: #f3f4f6; color: #4b5563; }
+.status-processing { background-color: #fef3c7; color: #d97706; }
+.status-pending { background-color: #e0f2fe; color: #0369a1; }
 .status-failed { background-color: #d32f2f; }
-
-.btn-blue {
-  background-color: #1976d2;
-  color: white;
-  border: none;
-}
-.btn-blue:hover {
-  background-color: #1565c0;
-}
 
 .invoice-table th {
   font-weight: 500;
@@ -326,29 +390,45 @@ button:active,
 
 .tabs {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
 .tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.5rem 0;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 0.5rem 1.25rem;
   font-size: 0.9rem;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: #6b7280;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .tab:hover {
-  color: var(--primary-color);
+  background: #e5e7eb;
+  color: #374151;
 }
 
 .tab.active {
-  color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.tab-unpaid.active {
+  background: #f97316;
+  box-shadow: 0 10px 25px rgba(249, 115, 22, 0.25);
+}
+
+.tab-paid.active {
+  background: #16a34a;
+  box-shadow: 0 10px 25px rgba(22, 163, 74, 0.25);
+}
+
+.tab-archived.active {
+  background: #6b7280;
+  box-shadow: 0 10px 25px rgba(107, 114, 128, 0.25);
 }
 
 .qr-data {

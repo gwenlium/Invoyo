@@ -1,14 +1,20 @@
-import { Component, OnDestroy, OnInit, signal, effect } from '@angular/core';
+import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpEventType } from '@angular/common/http';
-import { Subject, timer, of } from 'rxjs';
-import { switchMap, takeUntil, catchError, debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Subject } from 'rxjs';
+import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { DocumentService } from '../../services/document.service';
 import { DocumentItem } from '../../models/document.model';
 import QRCode from 'qrcode';
 
 type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'uploaded' | 'processed';
+
+interface ToastMessage {
+  id: number;
+  message: string;
+  tone: 'success' | 'info' | 'error';
+}
 
 @Component({
   selector: 'app-invoice-list',
@@ -38,6 +44,12 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // QR Code data URLs mapped by document ID
   qrCodeUrls = signal<Map<string, string>>(new Map());
 
+  // Local overrides for processed_at to ensure Modified column updates immediately
+  clientModified = signal<Map<string, string>>(new Map());
+
+  // UI feedback toasts
+  toasts = signal<ToastMessage[]>([]);
+
   private destroy$ = new Subject<void>();
 
   // Filter state
@@ -48,6 +60,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   sortDirection = signal<'asc' | 'desc'>('desc');
 
   private pollingTimer: any;
+  private toastIdCounter = 0;
+  private toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  private audioContext?: AudioContext;
 
   constructor(private documentService: DocumentService) {}
 
@@ -70,7 +85,12 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.fetchDocuments().subscribe({
       next: (resp) => {
         if (!this.editingDocId()) {
-          this.documents.set(resp.items);
+          const overrideMap = this.clientModified();
+          const merged = resp.items.map(item => {
+            const localTs = overrideMap.get(item.id);
+            return localTs ? { ...item, processed_at: localTs } : item;
+          });
+          this.documents.set(merged);
           this.loading.set(false);
           this.error.set('');
           this.lastUpdated.set(new Date());
@@ -197,9 +217,15 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     
     this.documentService.delete(doc.id).subscribe({
       next: () => {
+        this.clientModified.update(map => {
+          const next = new Map(map);
+          next.delete(doc.id);
+          return next;
+        });
         this.documents.update(docs => docs.filter(d => d.id !== doc.id));
+        this.triggerToast('Document deleted', 'success');
       },
-      error: (err) => alert('Failed to delete document')
+      error: () => this.triggerToast('Failed to delete document', 'error')
     });
   }
 
@@ -237,11 +263,13 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           
           // Clear success message after 3s
           setTimeout(() => this.uploadMessage.set(''), 3000);
+          this.triggerToast('Document uploaded', 'success');
         }
       },
       error: (err) => {
         this.error.set(err?.error?.detail || 'Upload failed');
         this.isUploading.set(false);
+        this.triggerToast('Upload failed', 'error');
       },
     });
   }
@@ -285,36 +313,49 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     const updates = {
       confirmed_due_date: this.editForm().date,
-      confirmed_amount: this.editForm().amount
+      confirmed_amount: this.editForm().amount,
+      processed_at: new Date().toISOString()
     };
     
     this.documentService.update(doc.id, updates).subscribe({
       next: (updatedDoc) => {
-        // Update local state
-        this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+        const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
+        // Update local state and stamp modified
+        this.setClientModified(stamped.id, stamped);
         this.editingDocId.set(null);
+        this.triggerToast('Invoice details saved', 'success');
       },
-      error: (err) => console.error('Failed to update document', err)
+      error: () => this.triggerToast('Failed to save invoice details', 'error')
     });
   }
 
   markAsPaid(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
-    this.documentService.update(doc.id, { status: 'paid' }).subscribe({
+    this.documentService.update(doc.id, { 
+      status: 'paid',
+      processed_at: new Date().toISOString()
+    }).subscribe({
       next: (updatedDoc) => {
-        this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+        const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
+        this.setClientModified(stamped.id, stamped);
+        this.triggerToast('Marked as paid', 'success');
       },
-      error: (err) => console.error('Failed to mark as paid', err)
+      error: () => this.triggerToast('Failed to mark as paid', 'error')
     });
   }
 
   archiveDocument(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
-    this.documentService.update(doc.id, { status: 'archived' }).subscribe({
+    this.documentService.update(doc.id, { 
+      status: 'archived',
+      processed_at: new Date().toISOString()
+    }).subscribe({
       next: (updatedDoc) => {
-        this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+        const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
+        this.setClientModified(stamped.id, stamped);
+        this.triggerToast('Moved to archive', 'info');
       },
-      error: (err) => console.error('Failed to archive document', err)
+      error: () => this.triggerToast('Failed to archive document', 'error')
     });
   }
 
@@ -326,12 +367,43 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // Allow marking a document as unpaid (revert to processed/unpaid state).
   markAsUnpaid(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
-    this.documentService.update(doc.id, { status: 'processed' }).subscribe({
+    this.documentService.update(doc.id, { 
+      status: 'processed',
+      processed_at: new Date().toISOString()
+    }).subscribe({
       next: (updatedDoc) => {
-        this.documents.update(docs => docs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+        const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
+        this.setClientModified(stamped.id, stamped);
+        this.triggerToast('Marked as unpaid', 'info');
       },
-      error: (err) => console.error('Failed to mark as unpaid', err)
+      error: () => this.triggerToast('Failed to mark as unpaid', 'error')
     });
+  }
+
+  // Allow unarchiving a document (revert to paid state).
+  unarchive(doc: DocumentItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.documentService.update(doc.id, { 
+      status: 'paid',
+      processed_at: new Date().toISOString()
+    }).subscribe({
+      next: (updatedDoc) => {
+        const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
+        this.setClientModified(stamped.id, stamped);
+        this.triggerToast('Unarchived', 'info');
+      },
+      error: () => this.triggerToast('Failed to unarchive', 'error')
+    });
+  }
+
+  private setClientModified(docId: string, updatedDoc: DocumentItem): void {
+    const ts = updatedDoc.processed_at ?? new Date().toISOString();
+    this.clientModified.update(map => {
+      const next = new Map(map);
+      next.set(docId, ts);
+      return next;
+    });
+    this.documents.update(docs => docs.map(d => d.id === docId ? { ...updatedDoc, processed_at: ts } : d));
   }
 
   viewPdf(doc: DocumentItem, event?: Event): void {
@@ -343,7 +415,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
       },
-      error: (err) => console.error('Failed to download document', err)
+      error: () => this.triggerToast('Failed to open PDF', 'error')
     });
   }
 
@@ -353,6 +425,16 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (this.pollingTimer) {
       clearTimeout(this.pollingTimer);
     }
+    this.toastTimers.forEach(timeoutId => clearTimeout(timeoutId));
+    this.toastTimers.clear();
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => undefined);
+    }
+  }
+
+  dismissToast(id: number, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.removeToast(id);
   }
 
   statusClass(status: DocumentItem['status']): string {
@@ -362,7 +444,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       case 'archived':
         return 'status-archived';
       case 'processed':
-        return 'status-saved';
+        return 'status-modified';
       case 'processing':
         return 'status-processing';
       case 'pending':
@@ -374,7 +456,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   statusLabel(status: DocumentItem['status']): string {
-    if (status === 'processed') return 'Saved';
+    if (status === 'processed') return 'Modified';
     if (status === 'paid') return 'Paid';
     if (status === 'archived') return 'Archived';
     return status;
@@ -451,6 +533,61 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       });
     } catch (err) {
       console.error('Failed to generate QR code:', err);
+    }
+  }
+
+  private triggerToast(message: string, tone: 'success' | 'info' | 'error' = 'info'): void {
+    const id = ++this.toastIdCounter;
+    this.toasts.update(list => [...list, { id, message, tone }]);
+    const timeoutId = setTimeout(() => this.removeToast(id), 3500);
+    this.toastTimers.set(id, timeoutId);
+    this.playToastSound(tone);
+  }
+
+  private removeToast(id: number): void {
+    const timeoutId = this.toastTimers.get(id);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.toastTimers.delete(id);
+    }
+    this.toasts.update(list => list.filter(toast => toast.id !== id));
+  }
+
+  private playToastSound(tone: 'success' | 'info' | 'error'): void {
+    try {
+      if (typeof window === 'undefined') return;
+      const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctor) return;
+      if (!this.audioContext) {
+        this.audioContext = new Ctor();
+      }
+
+      const ctx = this.audioContext;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => undefined);
+      }
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      const frequency = tone === 'success' ? 880 : tone === 'error' ? 220 : 660;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
+    } catch (err) {
+      console.warn('Toast sound could not be played', err);
     }
   }
 }

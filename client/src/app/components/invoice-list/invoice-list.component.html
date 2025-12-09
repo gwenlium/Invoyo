@@ -1,19 +1,26 @@
+<div class="toast-container">
+  <div *ngFor="let toast of toasts()" class="toast" [ngClass]="toast.tone">
+    <span>{{ toast.message }}</span>
+    <button type="button" class="toast-close" (click)="dismissToast(toast.id, $event)" aria-label="Dismiss">×</button>
+  </div>
+</div>
+
 <div class="invoice-list-container">
   <div class="header-row">
     <div>
       <p class="eyebrow">Realtime feed</p>
       <h2>Documents</h2>
       <div class="tabs">
-        <button class="tab" [class.active]="activeTab() === 'unpaid'" (click)="setTab('unpaid')">Unpaid</button>
-        <button class="tab" [class.active]="activeTab() === 'paid'" (click)="setTab('paid')">Paid</button>
-        <button class="tab" [class.active]="activeTab() === 'archived'" (click)="setTab('archived')">Archived</button>
+        <button class="tab tab-unpaid" [class.active]="activeTab() === 'unpaid'" (click)="setTab('unpaid')">Unpaid</button>
+        <button class="tab tab-paid" [class.active]="activeTab() === 'paid'" (click)="setTab('paid')">Paid</button>
+        <button class="tab tab-archived" [class.active]="activeTab() === 'archived'" (click)="setTab('archived')">Archived</button>
       </div>
     </div>
     <div class="actions">
       <div class="upload-section">
         <label class="upload-btn" [class.disabled]="isUploading()">
           <input type="file" accept="application/pdf,image/png,image/jpeg" (change)="onFileSelected($event)" [disabled]="isUploading()" />
-          <span *ngIf="!isUploading()">+ Upload New</span>
+          <span *ngIf="!isUploading()">Upload</span>
           <span *ngIf="isUploading()">Uploading {{ uploadProgress() }}%</span>
         </label>
         <span class="upload-success" *ngIf="uploadMessage()">{{ uploadMessage() }}</span>
@@ -22,7 +29,7 @@
       <div class="search-box">
         <input type="text" placeholder="Search documents..." (input)="onSearch($event)" class="search-input">
       </div>
-      <span class="timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'shortTime' }}</span>
+      <span class="timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'HH:mm' }}</span>
     </div>
   </div>
 
@@ -35,10 +42,10 @@
         <tr>
           <th (click)="sortBy('filename')">File <span class="sort-icon" *ngIf="sortColumn() === 'filename'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
           <th (click)="sortBy('state')">Status <span class="sort-icon" *ngIf="sortColumn() === 'state'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
-          <th (click)="sortBy('date')">Date <span class="sort-icon" *ngIf="sortColumn() === 'date'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th (click)="sortBy('date')">Due Date <span class="sort-icon" *ngIf="sortColumn() === 'date'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
           <th (click)="sortBy('amount')">Amount <span class="sort-icon" *ngIf="sortColumn() === 'amount'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
           <th (click)="sortBy('uploaded')">Uploaded <span class="sort-icon" *ngIf="sortColumn() === 'uploaded'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
-          <th (click)="sortBy('processed')">Processed <span class="sort-icon" *ngIf="sortColumn() === 'processed'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
+          <th (click)="sortBy('processed')">Modified <span class="sort-icon" *ngIf="sortColumn() === 'processed'">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span></th>
         </tr>
       </thead>
       <tbody>
@@ -50,7 +57,7 @@
             </td>
             <td>
               <div class="status-container">
-                <span class="status" [ngClass]="statusClass(doc.status)">{{ statusLabel(doc.status) }}</span>
+                <span *ngIf="doc.status === 'paid' || doc.status === 'archived'" class="status" [ngClass]="statusClass(doc.status)">{{ statusLabel(doc.status) }}</span>
                 <span *ngIf="showUnpaidLabel(doc)" class="status status-unpaid">Unpaid</span>
               </div>
             </td>
@@ -68,7 +75,9 @@
                     <button *ngIf="editingDocId() !== doc.id" class="ghost small" (click)="startEdit(doc, $event)">Edit Details</button>
                     <button class="ghost small" (click)="viewPdf(doc, $event)">View Original PDF</button>
                     <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
-                    <button *ngIf="doc.status === 'paid'" class="btn-blue small" (click)="archiveDocument(doc, $event)">Archive</button>
+                    <button *ngIf="doc.status === 'paid'" class="primary small" (click)="markAsUnpaid(doc, $event)">Mark as Unpaid</button>
+                    <button *ngIf="doc.status === 'paid'" class="secondary small" (click)="archiveDocument(doc, $event)">Archive</button>
+                    <button *ngIf="doc.status === 'archived'" class="secondary small" (click)="unarchive(doc, $event)">Unarchive</button>
                     <button class="danger small" (click)="deleteDocument(doc, $event)">Delete</button>
                   </div>
                 </div>
