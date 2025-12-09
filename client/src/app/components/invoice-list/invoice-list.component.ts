@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpEventType } from '@angular/common/http';
@@ -6,7 +6,7 @@ import { Subject, timer, of } from 'rxjs';
 import { switchMap, takeUntil, catchError, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { DocumentService } from '../../services/document.service';
 import { DocumentItem } from '../../models/document.model';
-import { QRCodeModule } from 'angularx-qrcode';
+import QRCode from 'qrcode';
 
 type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'uploaded' | 'processed';
 
@@ -15,7 +15,7 @@ type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'u
   templateUrl: './invoice-list.component.html',
   styleUrls: ['./invoice-list.component.css'],
   standalone: true,
-  imports: [CommonModule, FormsModule, QRCodeModule]
+  imports: [CommonModule, FormsModule]
 })
 export class InvoiceListComponent implements OnInit, OnDestroy {
   documents = signal<DocumentItem[]>([]);
@@ -34,6 +34,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   
   editingDocId = signal<string | null>(null);
   editForm = signal<{ date: string; amount: string }>({ date: '', amount: '' });
+  
+  // QR Code data URLs mapped by document ID
+  qrCodeUrls = signal<Map<string, string>>(new Map());
 
   private destroy$ = new Subject<void>();
 
@@ -255,6 +258,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       this.expandedDocId.set(null);
     } else {
       this.expandedDocId.set(doc.id);
+      // Generate QR code when expanding row
+      if (doc.qr_code_data && !this.qrCodeUrls().has(doc.id)) {
+        this.generateQRCode(doc.id, doc.qr_code_data);
+      }
     }
   }
 
@@ -424,5 +431,26 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   showUnpaidLabel(doc: DocumentItem): boolean {
     return doc.status === 'processed' && this.derivePaidStatus(doc) === 'Unpaid';
+  }
+
+  getQRCodeUrl(docId: string): string | undefined {
+    return this.qrCodeUrls().get(docId);
+  }
+
+  private async generateQRCode(docId: string, data: string): Promise<void> {
+    try {
+      const dataUrl = await QRCode.toDataURL(data, {
+        width: 200,
+        margin: 2,
+        errorCorrectionLevel: 'M'
+      });
+      this.qrCodeUrls.update(map => {
+        const newMap = new Map(map);
+        newMap.set(docId, dataUrl);
+        return newMap;
+      });
+    } catch (err) {
+      console.error('Failed to generate QR code:', err);
+    }
   }
 }

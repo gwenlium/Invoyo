@@ -10,10 +10,6 @@
       </div>
     </div>
     <div class="actions">
-
-        <div class="search-box">
-            <input type="text" placeholder="Search documents..." (input)="onSearch($event)" class="search-input">
-        </div>
       <div class="upload-section">
         <label class="upload-btn" [class.disabled]="isUploading()">
           <input type="file" accept="application/pdf,image/png,image/jpeg" (change)="onFileSelected($event)" [disabled]="isUploading()" />
@@ -21,6 +17,10 @@
           <span *ngIf="isUploading()">Uploading {{ uploadProgress() }}%</span>
         </label>
         <span class="upload-success" *ngIf="uploadMessage()">{{ uploadMessage() }}</span>
+      </div>
+
+      <div class="search-box">
+        <input type="text" placeholder="Search documents..." (input)="onSearch($event)" class="search-input">
       </div>
       <span class="timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'shortTime' }}</span>
     </div>
@@ -50,11 +50,8 @@
             </td>
             <td>
               <div class="status-container">
-                <span class="status" [ngClass]="'status-' + doc.status.toLowerCase()">
-                  {{ statusLabel(doc.status) }}
-                </span>
-                <!-- Added 'status' class for styling -->
-                <span *ngIf="showUnpaidLabel(doc)" class="status status-unpaid">UNPAID</span>
+                <span class="status" [ngClass]="statusClass(doc.status)">{{ statusLabel(doc.status) }}</span>
+                <span *ngIf="showUnpaidLabel(doc)" class="status status-unpaid">Unpaid</span>
               </div>
             </td>
             <td>{{ deriveInvoiceDate(doc) }}</td>
@@ -70,12 +67,8 @@
                   <div class="detail-actions">
                     <button *ngIf="editingDocId() !== doc.id" class="ghost small" (click)="startEdit(doc, $event)">Edit Details</button>
                     <button class="ghost small" (click)="viewPdf(doc, $event)">View Original PDF</button>
-                    <button class="primary small" *ngIf="doc.status === 'processed'" (click)="markAsPaid(doc)">Mark as Paid</button>
-                    
-                    <!-- Added Mark as Unpaid button -->
-                    <button class="primary small" *ngIf="doc.status === 'paid'" (click)="markAsUnpaid(doc)" style="background-color: #f57c00;">Mark as Unpaid</button>
-                    
-                    <button class="btn-blue small" *ngIf="doc.status === 'paid'" (click)="archive(doc, $event)">Archive</button>
+                    <button *ngIf="doc.status !== 'paid' && doc.status !== 'archived'" class="primary small" (click)="markAsPaid(doc, $event)">Mark as Paid</button>
+                    <button *ngIf="doc.status === 'paid'" class="btn-blue small" (click)="archiveDocument(doc, $event)">Archive</button>
                     <button class="danger small" (click)="deleteDocument(doc, $event)">Delete</button>
                   </div>
                 </div>
@@ -95,30 +88,20 @@
                   </div>
                 </div>
 
+                <div class="extracted-section" *ngIf="doc.qr_code_data">
+                  <h4>QR Code</h4>
+                  <div class="qr-container">
+                    <img *ngIf="getQRCodeUrl(doc.id)" [src]="getQRCodeUrl(doc.id)" class="qr-image" alt="QR Code" style="display: block; margin: 10px 0;">
+                    <details class="qr-raw-data">
+                      <summary>Show Raw Data</summary>
+                      <pre class="text-preview">{{ doc.qr_code_data }}</pre>
+                    </details>
+                  </div>
+                </div>
+
                 <div class="extracted-section">
                   <h4>Extracted Text</h4>
                   <pre class="text-preview">{{ doc.extracted_text || 'No text extracted.' }}</pre>
-                </div>
-
-                <div class="detail-section">
-                  <h4>QR CODE</h4>
-                  <div *ngIf="doc.qr_code_data; else noQr">
-                    <div class="qr-wrapper">
-                      <qrcode 
-                        [qrdata]="doc.qr_code_data" 
-                        [width]="200" 
-                        [errorCorrectionLevel]="'M'"
-                        [margin]="2">
-                      </qrcode>
-                    </div>
-                    <details class="qr-raw-data">
-                      <summary>Show Raw Data</summary>
-                      <pre>{{ doc.qr_code_data }}</pre>
-                    </details>
-                  </div>
-                  <ng-template #noQr>
-                    <p class="text-muted">No QR code detected</p>
-                  </ng-template>
                 </div>
               </div>
             </td>
