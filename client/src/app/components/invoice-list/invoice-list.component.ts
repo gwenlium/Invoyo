@@ -61,6 +61,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // Delete confirmation modal
   showDeleteModal = signal<boolean>(false);
   deleteModalDocument = signal<DocumentItem | null>(null);
+  
+  // Track initial page load for animation (signal for template binding)
+  hasInitiallyLoaded = signal<boolean>(false);
+  // Private flag to track if animation has ever been shown
+  private animationHasPlayed = false;
 
   private readonly dueKeywords = [
     'due date',
@@ -200,6 +205,14 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           this.loading.set(false);
           this.error.set('');
           this.lastUpdated.set(new Date());
+          
+          // Show animation only once on initial page load
+          if (!this.animationHasPlayed && merged.length > 0) {
+            this.animationHasPlayed = true;
+            this.hasInitiallyLoaded.set(true);
+            // Remove the animation class after it completes to prevent re-triggering
+            setTimeout(() => this.hasInitiallyLoaded.set(false), 1000);
+          }
         }
 
         // Poll if active work exists (pending/processing) or if we have saved docs that might be getting processed
@@ -674,6 +687,24 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     const ms = String(date.getMilliseconds()).padStart(3, '0');
     
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}`;
+  }
+
+  formatTimestamp(timestamp: string | Date): string {
+    if (!timestamp) return '—';
+    
+    // Convert to Date object and format in local timezone
+    const date = new Date(timestamp);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) return '—';
+    
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${day}.${month}.${year} ${hours}:${minutes}`;
   }
 
   deriveInvoiceDate(doc: DocumentItem): string {

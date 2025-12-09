@@ -52,29 +52,33 @@
 }
 
 .invoice-list-container {
-  animation: fadeIn 0.6s ease-in;
   position: relative;
 }
 
-.invoice-table-container {
+/* Only animate on initial page load */
+.invoice-list-container.initial-load {
+  animation: fadeIn 0.3s ease-in;
+}
+
+.invoice-list-container.initial-load .invoice-table-container {
   animation: tableSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.invoice-table tbody tr {
+.invoice-list-container.initial-load .invoice-table tbody tr {
   animation: rowStagger 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
-.invoice-table tbody tr:nth-child(1) { animation-delay: 0.05s; }
-.invoice-table tbody tr:nth-child(2) { animation-delay: 0.1s; }
-.invoice-table tbody tr:nth-child(3) { animation-delay: 0.15s; }
-.invoice-table tbody tr:nth-child(4) { animation-delay: 0.2s; }
-.invoice-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
-.invoice-table tbody tr:nth-child(6) { animation-delay: 0.3s; }
-.invoice-table tbody tr:nth-child(7) { animation-delay: 0.35s; }
-.invoice-table tbody tr:nth-child(8) { animation-delay: 0.4s; }
-.invoice-table tbody tr:nth-child(9) { animation-delay: 0.45s; }
-.invoice-table tbody tr:nth-child(10) { animation-delay: 0.5s; }
-.invoice-table tbody tr:nth-child(n+11) { animation-delay: 0.55s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(1) { animation-delay: 0.05s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(2) { animation-delay: 0.1s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(3) { animation-delay: 0.15s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(4) { animation-delay: 0.2s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(5) { animation-delay: 0.25s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(6) { animation-delay: 0.3s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(7) { animation-delay: 0.35s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(8) { animation-delay: 0.4s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(9) { animation-delay: 0.45s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(10) { animation-delay: 0.5s; }
+.invoice-list-container.initial-load .invoice-table tbody tr:nth-child(n+11) { animation-delay: 0.55s; }
 
 .table-header-bar {
   display: flex;

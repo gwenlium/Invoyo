@@ -3,7 +3,7 @@ Database models using SQLAlchemy ORM.
 """
 from sqlalchemy import Column, String, DateTime, Float, Text, Enum as SQLEnum, Index, func
 from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import re
 
@@ -62,6 +62,11 @@ class Document(Base):
         derived_due = self.confirmed_due_date if self.confirmed_due_date else extract_due_date(self.extracted_text)
         derived_amount = self.confirmed_amount if self.confirmed_amount else extract_amount(self.extracted_text)
         derived_paid = derive_paid_status(self.extracted_text, self.status.value)
+        
+        # Ensure timestamps are in UTC and ISO format
+        uploaded_at_utc = self.uploaded_at.replace(tzinfo=timezone.utc) if self.uploaded_at and not self.uploaded_at.tzinfo else self.uploaded_at
+        processed_at_utc = self.processed_at.replace(tzinfo=timezone.utc) if self.processed_at and not self.processed_at.tzinfo else self.processed_at
+        
         return {
             "id": self.id,
             "filename": self.filename,
@@ -69,8 +74,8 @@ class Document(Base):
             "extracted_text": self.extracted_text,
             "qr_code_data": self.qr_code_data,
             "confidence_score": self.confidence_score,
-            "uploaded_at": self.uploaded_at,
-            "processed_at": self.processed_at,
+            "uploaded_at": uploaded_at_utc.isoformat() if uploaded_at_utc else None,
+            "processed_at": processed_at_utc.isoformat() if processed_at_utc else None,
             "error_message": self.error_message,
             "derived_due": derived_due,
             "derived_amount": derived_amount,

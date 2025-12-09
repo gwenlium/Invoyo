@@ -23,7 +23,7 @@
   </div>
 </div>
 
-<div class="invoice-list-container">
+<div class="invoice-list-container" [class.initial-load]="hasInitiallyLoaded()">
   <div class="header-row">
     <div>
       <p class="eyebrow">Realtime feed</p>
@@ -87,8 +87,8 @@
             </td>
             <td>{{ deriveInvoiceDate(doc) }}</td>
             <td>{{ deriveAmount(doc) }}</td>
-            <td>{{ doc.uploaded_at | date:'dd.MM.yyyy HH:mm' }}</td>
-            <td>{{ doc.processed_at ? (doc.processed_at | date:'dd.MM.yyyy HH:mm') : '—' }}</td>
+            <td>{{ formatTimestamp(doc.uploaded_at) }}</td>
+            <td>{{ doc.processed_at ? formatTimestamp(doc.processed_at) : '—' }}</td>
           </tr>
           <tr *ngIf="expandedDocId() === doc.id" class="detail-row">
             <td colspan="7">
@@ -169,5 +169,5 @@
     </div>
   </div>
 
-  <div class="bottom-right-timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'HH:mm' }}</div>
+  <div class="bottom-right-timestamp" *ngIf="lastUpdated()">Updated {{ lastUpdated() | date:'dd.MM.yyyy HH:mm:ss' }}</div>
 </div>
