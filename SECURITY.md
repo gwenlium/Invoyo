@@ -1,70 +1,45 @@
-# Security Guidelines
+# Security
 
-## Before Deploying to Production
+Minimal guidance for running Invoyo safely in production.
 
-### 🔐 Required Security Changes
+## What’s Built In
+- JWT auth (access + refresh), RBAC, rate limiting
+- Password hashing: PBKDF2‑SHA256 via Passlib (OWASP‑aligned)
+- Input validation (Pydantic) and SQLAlchemy ORM
+- Structured/audit logging for auth events
 
-1. **Change Secret Key**
-   - Generate a secure random secret key (at least 32 characters)
-   - Set `SECRET_KEY` in your `.env` file
-   - Never commit the actual secret to version control
+## Required Before Production
+- Secrets: set a strong `SECRET_KEY` and rotate on compromise
+- Env: copy `example.env` → `.env`, fill DB/Redis/paths; never commit `.env`
+- DB/Redis: use managed services; strong credentials; least‑privileged access
+- HTTPS: terminate TLS at a reverse proxy (e.g., Nginx) and enforce HSTS
+- CORS: restrict allowed origins to your domains only
+- Storage: persist `UPLOAD_DIRECTORY` with a volume; set backups and retention
+- Tokens: pick sensible TTLs; protect refresh tokens; log and monitor auth failures
 
-   ```bash
-   # Generate a secure secret key
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
-   ```
+Quick secret generation
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
 
-2. **Update Database Credentials**
-   - Change default `POSTGRES_USER` and `POSTGRES_PASSWORD` in docker-compose files
-   - Use strong, unique passwords
-   - Update `DATABASE_URL` in `.env` accordingly
+## Configuration (essentials)
+- `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `DATABASE_URL`, `REDIS_URL`, `CELERY_*`
+- `UPLOAD_DIRECTORY`, `MAX_UPLOAD_SIZE_MB`
+- `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS`, `LOG_LEVEL`
 
-3. **Configure Authentication**
-   - The current `/auth/token` endpoint accepts any credentials (line 417 in `app/main.py`)
-   - **TODO**: Implement proper user authentication against database
-   - Add user registration, password validation, and account management
+## Operational Checklist
+- [ ] Strong `SECRET_KEY` configured; secrets stored out of VCS
+- [ ] DB/Redis credentials rotated and not defaults
+- [ ] CORS locked to prod domains; HTTPS enforced
+- [ ] Uploads persisted and backed up; quotas applied
+- [ ] Rate limits enabled; logs shipped/monitored
+- [ ] Error responses avoid leaking internals
 
-4. **Environment Variables**
-   - Copy `example.env` to `.env`
-   - Fill in all production values
-   - Never commit `.env` to git (already in `.gitignore`)
+## Notes & Limitations
+- Default `.env` values are for development only
+- Files are stored on local disk by default; use durable storage in prod
+- Client stores access tokens in browser storage; consider hardening session policy
 
-5. **CORS Configuration**
-   - Update `allow_origins` in `app/main.py` to match your production domain
-   - Remove `"*"` wildcard in production
-
-6. **HTTPS/TLS**
-   - Use HTTPS in production (configure reverse proxy like Nginx)
-   - Update `FRONTEND_URL` to use `https://`
-
-### 📋 Security Checklist
-
-- [ ] Secret key changed from default
-- [ ] Database credentials updated
-- [ ] Authentication implemented
-- [ ] `.env` file configured and NOT committed
-- [ ] CORS origins restricted
-- [ ] HTTPS configured
-- [ ] File upload size limits reviewed
-- [ ] Rate limiting configured (optional but recommended)
-- [ ] Database backups configured
-- [ ] Error messages don't leak sensitive info
-
-### 🛡️ Current Security Features
-
-- ✅ Password hashing with bcrypt (OWASP compliant)
-- ✅ JWT token-based authentication
-- ✅ Input validation with Pydantic
-- ✅ SQL injection protection via SQLAlchemy ORM
-- ✅ Non-root Docker container user
-- ✅ Environment-based configuration
-
-### ⚠️ Known Limitations
-
-1. **Demo Authentication**: The login endpoint currently accepts any username/password
-2. **Default Secrets**: Default values are placeholders only
-3. **Local Storage**: Uploaded files stored locally (not cloud)
-
-## Reporting Security Issues
-
-If you discover a security vulnerability, please report it privately to the repository owner.
+## Report Issues
+Please report vulnerabilities privately to the maintainer/owner. Do not open public issues with exploit details.
