@@ -7,6 +7,8 @@ import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { DocumentService } from '../../services/document.service';
 import { DocumentItem } from '../../models/document.model';
 import QRCode from 'qrcode';
+import { Router } from '@angular/router';
+import { AuthService } from '../../services/auth.service';
 
 type ColumnFilterKeys = 'filename' | 'state' | 'date' | 'amount' | 'status' | 'uploaded' | 'processed';
 type TabKey = 'all' | 'unpaid' | 'paid' | 'archived';
@@ -179,7 +181,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   private formattedTextCache = new Map<string, { source: string; lines: FormattedExtractedLine[] }>();
   private uploadSubscription?: Subscription;
 
-  constructor(private documentService: DocumentService) {}
+  constructor(private documentService: DocumentService, private auth: AuthService, private router: Router) {}
 
   ngOnInit(): void {
     // Handle search debounce
@@ -194,6 +196,16 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
     // Start adaptive polling
     this.startPolling();
+  }
+
+  get currentUsername(): string {
+    const u = this.auth.getCurrentUser();
+    return u?.username || u?.email || 'User';
+  }
+
+  logout() {
+    this.auth.logout();
+    this.router.navigateByUrl('/login');
   }
 
   startPolling() {

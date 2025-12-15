@@ -27,6 +27,10 @@
       <div class="search-box">
         <input type="text" placeholder="Search files..." (input)="onSearch($event)" class="search-input">
       </div>
+      <div class="user-controls">
+        <span class="user-pill">{{ currentUsername }}</span>
+        <button class="ghost small glow" type="button" (click)="logout()">Logout</button>
+      </div>
     </div>
   </div>
 

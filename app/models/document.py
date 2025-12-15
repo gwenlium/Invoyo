@@ -1,15 +1,15 @@
 """
-Database models using SQLAlchemy ORM.
+Document model for invoice storage and processing.
 """
 from sqlalchemy import Column, String, DateTime, Float, Text, Enum as SQLEnum, Index, func
-from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, timezone
 from enum import Enum
 import re
+from .base import Base
 
-Base = declarative_base()
 
 class DocumentStatus(str, Enum):
+    """Document processing status."""
     PENDING = "pending"
     PROCESSING = "processing"
     PROCESSED = "processed"
@@ -17,6 +17,7 @@ class DocumentStatus(str, Enum):
     PAID = "paid"
     ARCHIVED = "archived"
     SAVED = "saved"
+
 
 class Document(Base):
     """Stores document metadata."""
@@ -59,6 +60,8 @@ class Document(Base):
 
     def to_dict(self):
         """Convert to dictionary for API responses."""
+        from ..services.document_parser import extract_due_date, extract_amount, derive_paid_status
+        
         derived_due = self.confirmed_due_date if self.confirmed_due_date else extract_due_date(self.extracted_text)
         derived_amount = self.confirmed_amount if self.confirmed_amount else extract_amount(self.extracted_text)
         derived_paid = derive_paid_status(self.extracted_text, self.status.value)
@@ -83,69 +86,3 @@ class Document(Base):
             "confirmed_due_date": self.confirmed_due_date,
             "confirmed_amount": self.confirmed_amount,
         }
-
-
-def extract_due_date(text: str | None) -> str | None:
-    """Best-effort parse of due date."""
-    if not text:
-        return None
-    
-    # Common date formats: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD
-    # We look for them following keywords
-    date_regex = r"(\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{4}[./-]\d{1,2}[./-]\d{1,2})"
-    
-    # Keywords in English, German, French
-    keywords = [
-        r"Due\s*date", r"Due\s*by", r"Payable\s*by", r"Payment\s*due",  # English
-        r"Fällig\s*am", r"Bezahlbar\s*bis", r"Zahlbar\s*bis", r"Fälligkeitsdatum",  # German
-        r"Echéance", r"Payable\s*le"  # French
-    ]
-    
-    # Construct a pattern like: (?:Due date|Payable by)[:\s]*(date_regex)
-    pattern = f"(?:{'|'.join(keywords)})[:\s]*{date_regex}"
-    
-    match = re.search(pattern, text, re.IGNORECASE)
-    if match:
-        return match.group(1)
-        
-    return None
-
-
-def extract_amount(text: str | None) -> str | None:
-    """Grab the total amount."""
-    if not text:
-        return None
-        
-    # Look for currency symbols or keywords
-    # 123.45 or 123,45 or 1,234.56 or 1.234,56
-    amount_regex = r"(\d{1,3}(?:[.,']\d{3})*[.,]\d{2})"
-    
-    keywords = [
-        r"Total", r"Amount\s*Due", r"Grand\s*Total", r"Balance\s*Due", r"Invoice\s*Total",  # English
-        r"Gesamtbetrag", r"Endbetrag", r"Betrag", r"Summe", r"Rechnungsbetrag",  # German
-        r"Total\s*TTC", r"Montant"  # French
-    ]
-    
-    pattern = f"(?:{'|'.join(keywords)})[^0-9\n]*{amount_regex}"
-    
-    match = re.search(pattern, text, re.IGNORECASE)
-    if match:
-        return match.group(1)
-        
-    # Fallback: Find the largest number that looks like a currency at the end of the document?
-    # Or just return the last match found (often the total is at the bottom)
-    matches = re.findall(amount_regex, text)
-    if matches:
-        return matches[-1]
-        
-    return None
-
-
-def derive_paid_status(text: str | None, status: str) -> str:
-    if text:
-        lower = text.lower()
-        if "bezahlt" in lower or "paid" in lower:
-            return "Paid"
-    if status == "processed":
-        return "Unpaid"
-    return "Pending"

@@ -9,16 +9,17 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db, init_db
-from .models import Document, DocumentStatus as DBDocumentStatus
+from .models import Document, DocumentStatus as DBDocumentStatus, Base
 from .schemas import DocumentResponse, DocumentStatus, DocumentListResponse, DocumentUpdate
-from .services import (
+from .legacy_services import (
     ocr_service,
     file_storage_service,
     document_service,
     process_document_logic
 )
-from .security import get_current_user, create_access_token
+from .security import get_current_user, get_current_admin_user, create_access_token
 from .logging_config import configure_logging, log_audit_event
+from . import auth  # Import auth router
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -39,6 +40,9 @@ app = FastAPI(
 # Rate limiting
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
+
+# Include authentication router
+app.include_router(auth.router)
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request, exc):
@@ -372,22 +376,23 @@ async def update_document(
 @app.delete(
     "/documents/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a document"
+    summary="Delete a document (Admin Only)"
 )
 async def delete_document(
     document_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_admin_user),  # ADMIN ONLY
     db: Session = Depends(get_db)
 ):
-    """Delete a document and its stored file."""
+    """
+    Delete a document and its stored file.
+    
+    **Requires admin role** - demonstrates role-based access control (RBAC).
+    """
     user_id = current_user.get("user_id")
 
     document = document_service.get_document(db, document_id)
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-
-    if document.uploaded_by_user_id and document.uploaded_by_user_id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this document")
 
     document_service.delete_document(db, document_id)
     file_storage_service.delete(document_id)
@@ -397,45 +402,13 @@ async def delete_document(
         user_id=user_id,
         resource_id=document_id,
         action="delete",
+        details={"admin_action": True},
         status="success"
     )
+    
+    logger.info(f"Admin {user_id} deleted document {document_id}")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-# =====================
-# AUTHENTICATION
-# =====================
-
-@app.post("/auth/token", summary="Get access token")
-async def login(username: str, password: str):
-    """
-    Get JWT access token for API authentication.
-    
-    ⚠️ WARNING: This is a DEMO endpoint that accepts any credentials!
-    In production, you MUST implement proper authentication:
-    - Validate username/password against database
-    - Use password hashing (bcrypt/argon2)
-    - Implement rate limiting
-    - Add account lockout after failed attempts
-    """
-    # TODO: SECURITY - Validate username/password against database
-    # Currently accepts ANY credentials for demo purposes
-    
-    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-    access_token = create_access_token(
-        data={"sub": username},
-        expires_delta=access_token_expires
-    )
-    
-    log_audit_event(
-        "user_login",
-        user_id=username,
-        action="authenticate",
-        status="success"
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": settings.access_token_expire_minutes * 60
-    }
+# Note: Authentication endpoints have been moved to auth.py router
+# Use /auth/register, /auth/login, /auth/refresh, /auth/me for authentication

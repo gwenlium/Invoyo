@@ -2,6 +2,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from .config import get_settings
+from .models import Base  # Import Base from models package
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,5 +36,5 @@ def get_db() -> Session:
 
 def init_db():
     """Initialize database tables."""
-    from .models import Base
+    # Base is already imported at the top
     Base.metadata.create_all(bind=engine)
