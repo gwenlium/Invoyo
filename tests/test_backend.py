@@ -125,7 +125,7 @@ class TestAuthentication:
         assert data["role"] == "admin"
         assert data["email"] == "first@test.com"
     
-    def test_register_subsequent_users_are_regular(self, admin_user, test_db):
+    def test_register_subsequent_users_are_regular(self, admin_user):
         """Subsequent users should have regular user role."""
         response = client.post(
             "/auth/register",
@@ -139,7 +139,7 @@ class TestAuthentication:
         data = response.json()
         assert data["role"] == "user"
     
-    def test_register_duplicate_email_fails(self, admin_user, test_db):
+    def test_register_duplicate_email_fails(self, admin_user):
         """Cannot register with duplicate email."""
         response = client.post(
             "/auth/register",
@@ -164,7 +164,7 @@ class TestAuthentication:
         )
         assert response.status_code == 422  # Validation error
     
-    def test_login_success(self, admin_user, test_db):
+    def test_login_success(self, admin_user):
         """Valid credentials should return access and refresh tokens."""
         response = client.post(
             "/auth/login",
@@ -176,7 +176,7 @@ class TestAuthentication:
         assert "refresh_token" in data
         assert data["token_type"] == "bearer"
     
-    def test_login_wrong_password_fails(self, admin_user, test_db):
+    def test_login_wrong_password_fails(self, admin_user):
         """Wrong password should fail."""
         response = client.post(
             "/auth/login",
@@ -193,7 +193,7 @@ class TestAuthentication:
         )
         assert response.status_code == 401
     
-    def test_refresh_token(self, admin_user, test_db):
+    def test_refresh_token(self, admin_user):
         """Refresh token should generate new access token."""
         # Login first
         login_response = client.post(
@@ -212,7 +212,7 @@ class TestAuthentication:
         assert "access_token" in data
         assert "refresh_token" in data
     
-    def test_get_current_user(self, admin_token, test_db):
+    def test_get_current_user(self, admin_token):
         """Authenticated user should be able to get their info."""
         response = client.get(
             "/auth/me",
@@ -236,7 +236,7 @@ class TestAuthorization:
         response = client.get("/documents/")
         assert response.status_code == 403  # No credentials
     
-    def test_regular_user_cannot_delete(self, user_token, test_db):
+    def test_regular_user_cannot_delete(self, user_token):
         """Regular users should not be able to delete documents."""
         response = client.delete(
             "/documents/fake-id",
@@ -245,7 +245,7 @@ class TestAuthorization:
         assert response.status_code == 403  # Forbidden
         assert "Insufficient permissions" in response.json()["detail"]
     
-    def test_admin_can_delete(self, admin_token, test_db):
+    def test_admin_can_delete(self, admin_token):
         """Admin users should be able to delete documents."""
         # This will fail with 404 (doc doesn't exist), but we verify
         # authorization passes (not 403)
@@ -327,7 +327,7 @@ class TestInputValidation:
         )
         assert response.status_code == 422
     
-    def test_sql_injection_prevented(self, admin_user, admin_token, test_db):
+    def test_sql_injection_prevented(self, admin_user, admin_token):
         """SQL injection attempts should be safely handled."""
         # Try SQL injection in document ID
         malicious_id = "'; DROP TABLE users; --"

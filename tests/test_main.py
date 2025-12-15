@@ -2,20 +2,20 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.database import SessionLocal
+from app.database import SessionLocal, get_db
 from app.models import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import os
 
-# Use in-memory SQLite for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+# Use PostgreSQL for tests (to match production enum types)
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://testuser:testpass@localhost:5432/testdb"
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base.metadata.create_all(bind=engine)
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def override_get_db():
     try:
@@ -24,23 +24,37 @@ def override_get_db():
     finally:
         db.close()
 
-from app.database import get_db
 app.dependency_overrides[get_db] = override_get_db
 
 client = TestClient(app)
+
+@pytest.fixture(scope="function")
+def test_db():
+    """Create fresh database for each test."""
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
 
 # ============================
 # AUTHENTICATION TESTS
 # ============================
 
-def test_login():
+def test_login(test_db):
     """Test JWT token generation."""
-    response = client.post("/auth/token?username=testuser&password=testpass")
+    # First register a user
+    client.post(
+        "/auth/register",
+        json={"email": "testuser@test.com", "username": "testuser", "password": "TestPass123!"}
+    )
+    # Then login
+    response = client.post(
+        "/auth/login",
+        json={"username": "testuser", "password": "TestPass123!"}
+    )
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
     assert data["token_type"] == "bearer"
-    assert "expires_in" in data
 
 def test_upload_without_auth():
     """Test that endpoints require authentication."""
@@ -67,9 +81,18 @@ def test_health_check():
 # ============================
 
 @pytest.fixture
-def auth_headers():
+def auth_headers(test_db):
     """Get authentication headers for tests."""
-    response = client.post("/auth/token?username=testuser&password=testpass")
+    # Register user
+    client.post(
+        "/auth/register",
+        json={"email": "testuser@test.com", "username": "testuser", "password": "TestPass123!"}
+    )
+    # Login
+    response = client.post(
+        "/auth/login",
+        json={"username": "testuser", "password": "TestPass123!"}
+    )
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -158,11 +181,11 @@ def test_rate_limit_on_upload(auth_headers):
 # ERROR HANDLING TESTS
 # ============================
 
-def test_malformed_request():
+def test_malformed_request(test_db):
     """Test handling of malformed requests."""
-    response = client.post("/auth/token?username=test")  # Missing password
+    response = client.post("/auth/login", json={"username": "test"})  # Missing password
     # Should handle gracefully (depends on implementation)
-    assert response.status_code in [200, 400, 422]
+    assert response.status_code in [400, 422]
 
 # ============================
 # DATABASE TESTS
