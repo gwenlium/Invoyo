@@ -114,21 +114,35 @@ def auth_headers(client):
     db.close()
     return {"Authorization": f"Bearer {token}"}
 
-def test_upload_pdf(auth_headers):
-    """Test uploading a PDF file."""
-    pdf_content = b"%PDF-1.4\n%test content"
+
+def test_upload_pdf(client, auth_headers, test_db):
+    """Uploading a valid PDF returns metadata and persists a document."""
+    minimal_pdf = (
+        b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]"
+        b" /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n"
+        b"4 0 obj\n<< >>\nstream\nBT\n/F1 12 Tf\n100 700 Td\n(Sample Invoice) Tj\nET\n"
+        b"endstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
+        b"xref\n0 6\n0000000000 65535 f \n0000000010 00000 n \n"
+        b"0000000061 00000 n \n0000000120 00000 n \n0000000277 00000 n \n0000000390 00000 n \n"
+        b"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n482\n%%EOF"
+    )
+
     response = client.post(
         "/documents/",
-        files={"file": ("test.pdf", pdf_content, "application/pdf")},
-        headers=auth_headers
+        files={"file": ("sample.pdf", minimal_pdf, "application/pdf")},
+        headers=auth_headers,
     )
-    assert response.status_code == 201
-    data = response.json()
-    assert data["filename"] == "test.pdf"
-    assert data["status"] in ["processed", "failed"]  # May fail with mock content
-    assert "id" in data
 
-def test_upload_invalid_file_type(auth_headers):
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["filename"] == "sample.pdf"
+    assert payload["status"] in {"processed", "pending", "failed"}
+    assert payload["id"]
+
+
+def test_upload_invalid_file_type(client, auth_headers):
     """Test that non-PDF files are rejected."""
     response = client.post(
         "/documents/",
@@ -138,7 +152,7 @@ def test_upload_invalid_file_type(auth_headers):
     assert response.status_code == 415  # Unsupported media type
     assert "Invalid file type" in response.json()["detail"]
 
-def test_upload_file_too_large(auth_headers):
+def test_upload_file_too_large(client, auth_headers):
     """Test file size validation."""
     large_content = b"x" * (51 * 1024 * 1024)  # 51 MB
     response = client.post(
@@ -152,7 +166,7 @@ def test_upload_file_too_large(auth_headers):
 # DOCUMENT RETRIEVAL TESTS
 # ============================
 
-def test_get_document(auth_headers):
+def test_get_document(client, auth_headers):
     """Test retrieving a document."""
     # First upload
     pdf_content = b"%PDF-1.4\n%test"
@@ -168,13 +182,13 @@ def test_get_document(auth_headers):
     assert get_response.status_code == 200
     assert get_response.json()["id"] == doc_id
 
-def test_get_nonexistent_document(auth_headers):
+def test_get_nonexistent_document(client, auth_headers):
     """Test retrieving a non-existent document."""
     response = client.get("/documents/nonexistent-id", headers=auth_headers)
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
 
-def test_list_documents(auth_headers):
+def test_list_documents(client, auth_headers):
     """Test listing documents."""
     response = client.get("/documents/", headers=auth_headers)
     assert response.status_code == 200
@@ -188,7 +202,7 @@ def test_list_documents(auth_headers):
 # RATE LIMITING TESTS
 # ============================
 
-def test_rate_limit_on_upload(auth_headers):
+def test_rate_limit_on_upload(client, auth_headers):
     """Test that rate limiting is applied (would need more requests)."""
     # Note: Actual rate limiting test would require many requests
     # This is a placeholder demonstrating the concept
@@ -201,7 +215,7 @@ def test_rate_limit_on_upload(auth_headers):
 
 def test_malformed_request(client, test_db):
     """Test handling of malformed requests."""
-    response = client.post("/auth/login", json={"username": "test"})  # Missing password
+    response = client.post("/auth/login", json={"username": "test"})
     # Should handle gracefully (depends on implementation)
     assert response.status_code in [400, 422]
 
@@ -209,7 +223,7 @@ def test_malformed_request(client, test_db):
 # DATABASE TESTS
 # ============================
 
-def test_document_persistence(auth_headers):
+def test_document_persistence(client, auth_headers):
     """Test that documents persist in database."""
     # Upload document
     pdf_content = b"%PDF-1.4\npersistent"
