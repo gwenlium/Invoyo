@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
     
     # Rate limiting
+    rate_limit_enabled: bool = True  # Set to False in CI to avoid test hangs
     rate_limit_requests: int = 100
     rate_limit_window_seconds: int = 60
     

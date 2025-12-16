@@ -37,9 +37,12 @@ app = FastAPI(
     description="Store, parse, and track invoices with OCR extraction"
 )
 
-# Rate limiting
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
+# Rate limiting (only if enabled - disabled in CI to prevent test hangs)
+if settings.rate_limit_enabled:
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+else:
+    logger.info("Rate limiting disabled (RATE_LIMIT_ENABLED=false)")
 
 # Include authentication router
 app.include_router(auth.router)
