@@ -2,24 +2,22 @@
 Frontend tests for Angular components.
 Tests basic component functionality, routing, and integration with backend API.
 """
+import os
+
+# Keep the suite self-contained by default.
+# If you want to run against Postgres, export DATABASE_URL before running pytest.
+os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.main import app
-from app.database import Base, get_db
+from app.database import Base, get_db, engine
 from app.models import User, UserRole, Document, DocumentStatus
 from app.security import get_password_hash
 import uuid
-import os
 import json
-
-# Use PostgreSQL for tests (to match production enum types)
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://testuser:testpass@localhost:5432/testdb"
-)
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Override database dependency
@@ -240,8 +238,10 @@ class TestDocumentListComponent:
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
-        documents = response.json()
-        assert isinstance(documents, list)
+        data = response.json()
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert isinstance(data["items"], list)
     
     def test_get_document_list_requires_auth(self, test_db):
         """Test that document list requires authentication."""
