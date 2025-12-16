@@ -73,10 +73,6 @@ def test_upload_without_auth(client):
         files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")}
     )
     assert response.status_code == 403  # Forbidden without auth
-        "/documents/",
-        files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")}
-    )
-    assert response.status_code == 403  # Forbidden without auth
 
 # ============================
 # HEALTH CHECK TESTS
