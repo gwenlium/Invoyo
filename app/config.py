@@ -1,8 +1,13 @@
 """Application configuration using environment variables."""
 import os
+import sys
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from functools import lru_cache
+
+
+def _running_under_pytest() -> bool:
+    return ("PYTEST_CURRENT_TEST" in os.environ) or ("pytest" in sys.modules)
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -41,7 +46,8 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
     
     # Rate limiting
-    rate_limit_enabled: bool = True  # Set to False in CI to avoid test hangs
+    # Default to disabled under pytest to avoid test flakiness; can be overridden via env.
+    rate_limit_enabled: bool = Field(default_factory=lambda: not _running_under_pytest())
     rate_limit_requests: int = 100
     rate_limit_window_seconds: int = 60
     

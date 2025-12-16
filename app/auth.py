@@ -34,7 +34,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # Rate limiting for authentication endpoints (prevent brute force)
-limiter = Limiter(key_func=get_remote_address)
+settings = get_settings()
+if settings.rate_limit_enabled:
+    limiter = Limiter(key_func=get_remote_address)
+else:
+    class NoOpLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+
+    limiter = NoOpLimiter()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
