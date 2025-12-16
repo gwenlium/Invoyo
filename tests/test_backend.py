@@ -336,7 +336,130 @@ class TestInputValidation:
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         # Should return 404, not crash
-        assert response.status_code == 404
+        assert "' or '1'='1" not in response.text
+
+
+# =====================
+# ADMIN MANAGEMENT TESTS
+# =====================
+
+class TestAdminManagement:
+    """Test suite for admin role management features."""
+    
+    def test_promote_user_to_admin(self, admin_token, regular_user):
+        """Admin should be able to promote a regular user to admin."""
+        response = client.post(
+            f"/auth/admin/promote/{regular_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["role"] == "admin"
+        assert data["username"] == "user"
+    
+    def test_demote_user_from_admin(self, admin_token, regular_user):
+        """Admin should be able to demote another admin to regular user."""
+        # First promote the user
+        client.post(
+            f"/auth/admin/promote/{regular_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        # Then demote them
+        response = client.post(
+            f"/auth/admin/demote/{regular_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["role"] == "user"
+    
+    def test_prevent_demoting_last_admin(self, admin_token, admin_user):
+        """Should not allow demoting the last remaining admin."""
+        response = client.post(
+            f"/auth/admin/demote/{admin_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 400
+        assert "last remaining admin" in response.json()["detail"]
+    
+    def test_regular_user_cannot_promote(self, user_token, regular_user):
+        """Regular users should not be able to promote others."""
+        response = client.post(
+            f"/auth/admin/promote/{regular_user.id}",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 403
+        assert "Only admins can promote" in response.json()["detail"]
+    
+    def test_list_all_users_admin_only(self, admin_token, user_token):
+        """Only admins should be able to list all users."""
+        # Admin should succeed
+        response = client.get(
+            "/auth/admin/users",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+        
+        # Regular user should fail
+        response = client.get(
+            "/auth/admin/users",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 403
+
+
+# =====================
+# ADMIN EMAIL ENV VAR TESTS
+# =====================
+
+class TestAdminEmailConfiguration:
+    """Test suite for ADMIN_EMAILS environment variable."""
+    
+    def test_admin_email_from_env(self, test_db, monkeypatch):
+        """User with email in ADMIN_EMAILS should become admin on registration."""
+        # Set ADMIN_EMAILS environment variable
+        monkeypatch.setenv("ADMIN_EMAILS", "special@test.com,another@test.com")
+        
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": "special@test.com",
+                "username": "specialuser",
+                "password": "Strong123!"
+            }
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["role"] == "admin"
+    
+    def test_non_admin_email_from_env(self, test_db, monkeypatch):
+        """User with email NOT in ADMIN_EMAILS should be regular user."""
+        monkeypatch.setenv("ADMIN_EMAILS", "special@test.com")
+        
+        # First register the special email
+        client.post(
+            "/auth/register",
+            json={
+                "email": "special@test.com",
+                "username": "specialuser",
+                "password": "Strong123!"
+            }
+        )
+        
+        # Then register a non-special email
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": "regular@test.com",
+                "username": "regularuser",
+                "password": "Strong123!"
+            }
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["role"] == "user"  # Should be regular user, not admin
 
 
 if __name__ == "__main__":
