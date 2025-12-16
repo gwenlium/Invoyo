@@ -2,23 +2,23 @@
 Backend tests for authentication and document management.
 Demonstrates unit and integration testing with pytest.
 """
+import os
+
+# Keep the suite self-contained by default.
+# If you want to run against Postgres, export DATABASE_URL before running pytest.
+os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.main import app
-from app.database import Base, get_db
+from app.database import Base, get_db, engine
 from app.models import User, UserRole, Document, DocumentStatus
 from app.security import get_password_hash
 import uuid
-import os
 
-# Use PostgreSQL for tests (to match production enum types)
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://testuser:testpass@localhost:5432/testdb"
-)
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Override database dependency
@@ -442,6 +442,8 @@ class TestAdminEmailConfiguration:
         
         # Set ADMIN_EMAILS environment variable
         monkeypatch.setenv("ADMIN_EMAILS", "special@test.com,another@test.com")
+        from app.config import get_settings
+        get_settings.cache_clear()
         
         response = client.post(
             "/auth/register",
@@ -464,6 +466,8 @@ class TestAdminEmailConfiguration:
         db.close()
         
         monkeypatch.setenv("ADMIN_EMAILS", "special@test.com")
+        from app.config import get_settings
+        get_settings.cache_clear()
         
         # First register the special email
         response1 = client.post(
