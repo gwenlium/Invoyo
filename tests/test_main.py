@@ -90,11 +90,10 @@ def test_health_check(client):
 # DOCUMENT UPLOAD TESTS
 # ============================
 
-@pytest.fixture(scope="session")
-def auth_headers(client):
+@pytest.fixture(scope="function")
+def auth_headers(client, test_db):
     """Get authentication headers for tests without rate-limited endpoints."""
-    # Ensure tables exist once for the session
-    Base.metadata.create_all(bind=engine)
+    # test_db ensures tables exist for this test function
     db = TestingSessionLocal()
     # Create or fetch a stable test user
     user = db.query(User).filter(User.username == "testuser").first()
@@ -138,7 +137,7 @@ def test_upload_pdf(client, auth_headers, test_db):
     assert response.status_code == 201, response.text
     payload = response.json()
     assert payload["filename"] == "sample.pdf"
-    assert payload["status"] in {"processed", "pending", "failed"}
+    assert payload["status"] in {"paid", "unpaid", "archived", "unarchived", "saved"}
     assert payload["id"]
 
 
