@@ -306,7 +306,8 @@ export class DocumentExtractionService {
       year += year < 50 ? 2000 : 1900;
     }
 
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    // Format as dd.mm.yyyy
+    return `${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
   }
 
   /**
