@@ -162,13 +162,20 @@ class DocumentService:
         updates: Dict
     ) -> Document:
         """Update document metadata (manual overrides)."""
+        from .models import DocumentStatus
+        from enum import Enum
+        
         document = db.query(Document).filter(Document.id == doc_id).first()
         if not document:
             raise ValueError(f"Document {doc_id} not found")
         
         for key, value in updates.items():
             if hasattr(document, key):
-                setattr(document, key, value)
+                # If value is an Enum, use its value for database storage
+                if isinstance(value, Enum):
+                    setattr(document, key, value.value)
+                else:
+                    setattr(document, key, value)
         # Always track user modifications with a fresh timestamp
         document.processed_at = datetime.utcnow()
         

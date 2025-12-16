@@ -80,6 +80,32 @@ async def startup_event():
                                 if "already exists" not in error_msg and "duplicate" not in error_msg:
                                     if "does not exist" not in error_msg:
                                         logger.debug(f"Enum value '{value}': {e}")
+
+                        # Normalize legacy/processing statuses to current lowercase labels
+                        try:
+                            cursor.execute(
+                                """
+                                UPDATE documents
+                                SET status = 'saved'
+                                WHERE status IN ('PENDING', 'PROCESSING', 'PROCESSED', 'FAILED', 'SAVED');
+                                """
+                            )
+                            cursor.execute(
+                                """
+                                UPDATE documents
+                                SET status = 'paid'
+                                WHERE status = 'PAID';
+                                """
+                            )
+                            cursor.execute(
+                                """
+                                UPDATE documents
+                                SET status = 'archived'
+                                WHERE status = 'ARCHIVED';
+                                """
+                            )
+                        except Exception as e:
+                            logger.debug(f"Status normalization: {e}")
                     except Exception as e:
                         logger.debug(f"Enum migration: {e}")
                     finally:

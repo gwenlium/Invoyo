@@ -26,7 +26,15 @@ class Document(Base):
     content_type = Column(String(50), nullable=False)
     file_size_bytes = Column(String, nullable=True)
     storage_path = Column(String(500), nullable=True)
-    status = Column(SQLEnum(DocumentStatus), default=DocumentStatus.SAVED, nullable=False)
+    status = Column(
+        SQLEnum(
+            DocumentStatus,
+            name="documentstatus",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=DocumentStatus.SAVED,
+        nullable=False,
+    )
     
     # Extracted data
     extracted_text = Column(Text, nullable=True)
