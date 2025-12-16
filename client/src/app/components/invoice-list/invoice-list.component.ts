@@ -630,7 +630,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // Allow unarchiving a document (revert to paid state).
   unarchive(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
-    this.justExpandedDocId.set(null); // Prevent animation on status change
+    this.justExpandedDocId.set(null);
     this.documentService.update(doc.id, { 
       status: 'paid',
       processed_at: new Date().toISOString()
