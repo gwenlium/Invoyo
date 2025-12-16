@@ -22,6 +22,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "IMG_6221.PNG",
+                "input": "..",
+                "output": "assets"
               }
             ],
             "styles": [

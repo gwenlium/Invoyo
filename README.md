@@ -1,5 +1,7 @@
 # Invoyo
 
+<img src="IMG_6221.PNG" alt="Invoyo icon" width="96" />
+
 Invoice management tool with automatic OCR extraction. Upload PDFs or images, extract text and QR codes, track payment status.
 
 ## Features
