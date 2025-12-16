@@ -43,6 +43,13 @@ if settings.rate_limit_enabled:
     app.state.limiter = limiter
 else:
     logger.info("Rate limiting disabled (RATE_LIMIT_ENABLED=false)")
+    # Create a no-op limiter that does nothing (for decorator compatibility)
+    class NoOpLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    limiter = NoOpLimiter()
 
 # Include authentication router
 app.include_router(auth.router)
