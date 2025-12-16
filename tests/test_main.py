@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.security import get_password_hash, create_access_token
 import os
+import gc
 
 # Use PostgreSQL for tests (to match production enum types)
 SQLALCHEMY_DATABASE_URL = os.getenv(
@@ -27,7 +28,11 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
-client = TestClient(app)
+@pytest.fixture(scope="session")
+def client():
+    """Session-scoped TestClient that is properly closed after all tests."""
+    with TestClient(app) as c:
+        yield c
 
 @pytest.fixture(scope="function")
 def test_db():
@@ -40,7 +45,7 @@ def test_db():
 # AUTHENTICATION TESTS
 # ============================
 
-def test_login():
+def test_login(client):
     """Test JWT token generation without hitting rate limits."""
     # Ensure tables exist
     Base.metadata.create_all(bind=engine)
@@ -61,9 +66,13 @@ def test_login():
     assert isinstance(token, str) and len(token) > 10
     db.close()
 
-def test_upload_without_auth():
+def test_upload_without_auth(client):
     """Test that endpoints require authentication."""
     response = client.post(
+        "/documents/",
+        files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")}
+    )
+    assert response.status_code == 403  # Forbidden without auth
         "/documents/",
         files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")}
     )
@@ -73,7 +82,7 @@ def test_upload_without_auth():
 # HEALTH CHECK TESTS
 # ============================
 
-def test_health_check():
+def test_health_check(client):
     """Test health check endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
@@ -86,7 +95,7 @@ def test_health_check():
 # ============================
 
 @pytest.fixture(scope="session")
-def auth_headers():
+def auth_headers(client):
     """Get authentication headers for tests without rate-limited endpoints."""
     # Ensure tables exist once for the session
     Base.metadata.create_all(bind=engine)
@@ -194,7 +203,7 @@ def test_rate_limit_on_upload(auth_headers):
 # ERROR HANDLING TESTS
 # ============================
 
-def test_malformed_request(test_db):
+def test_malformed_request(client, test_db):
     """Test handling of malformed requests."""
     response = client.post("/auth/login", json={"username": "test"})  # Missing password
     # Should handle gracefully (depends on implementation)
@@ -222,8 +231,7 @@ def test_document_persistence(auth_headers):
 
 
 def teardown_module(module=None):
-    """Ensure TestClient is closed to avoid hanging test sessions."""
-    try:
-        client.close()
-    except Exception:
-        pass
+    """Force garbage collection to clean up lingering resources."""
+    gc.collect()
+    # Dispose engine connections
+    engine.dispose()
