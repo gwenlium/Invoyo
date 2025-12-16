@@ -5,8 +5,11 @@ import { HttpEventType } from '@angular/common/http';
 import { Subject, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { DocumentService } from '../../services/document.service';
+import { DocumentExtractionService } from '../../services/document-extraction.service';
+import { DocumentFormattingService, FormattedExtractedLine } from '../../services/document-formatting.service';
+import { QRCodeService } from '../../services/qr-code.service';
+import { AudioService } from '../../services/audio.service';
 import { DocumentItem } from '../../models/document.model';
-import QRCode from 'qrcode';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
@@ -19,12 +22,6 @@ interface ToastMessage {
   background: string;
   color: string;
   leaving?: boolean;
-}
-
-interface FormattedExtractedLine {
-  index: number;
-  text: string;
-  classList: string[];
 }
 
 @Component({
@@ -74,91 +71,6 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   // Private flag to track if animation has ever been shown
   private animationHasPlayed = false;
 
-  private readonly dueKeywords = [
-    'due date',
-    'due-date',
-    'payment due',
-    'payment deadline',
-    'due on',
-    'fällig',
-    'faellig',
-    'zahlbar',
-    'zahlungsziel',
-    'verfall',
-    'scadenza',
-    'scad.',
-    'vencimiento',
-    'vence',
-    'deadline'
-  ];
-
-  private readonly amountKeywords = [
-    'total',
-    'amount',
-    'betrag',
-    'summe',
-    'balance',
-    'due',
-    'payable',
-    'zahlbetrag',
-    'grand total',
-    'invoice total',
-    'totalbetrag',
-    'rechnungsbetrag',
-    'gesamtbetrag',
-    'zu zahlen',
-    'amount due',
-    'total due',
-    'net total',
-    'brutto',
-    'netto',
-    'montant',
-    'importo',
-    'solde'
-  ];
-
-  private readonly supportedCurrencies = new Set([
-    'CHF','EUR','USD','GBP','SEK','NOK','DKK','CAD','AUD','NZD','JPY','CNY','INR'
-  ]);
-
-  private readonly monthLookup: Record<string, number> = {
-    jan: 1,
-    januar: 1,
-    january: 1,
-    feb: 2,
-    februar: 2,
-    february: 2,
-    mar: 3,
-    maerz: 3,
-    marz: 3,
-    march: 3,
-    apr: 4,
-    april: 4,
-    mai: 5,
-    may: 5,
-    jun: 6,
-    juni: 6,
-    june: 6,
-    juli: 7,
-    july: 7,
-    jul: 7,
-    aug: 8,
-    august: 8,
-    sep: 9,
-    sept: 9,
-    september: 9,
-    oct: 10,
-    oktober: 10,
-    october: 10,
-    octobre: 10,
-    okt: 10,
-    nov: 11,
-    november: 11,
-    dez: 12,
-    dezember: 12,
-    december: 12
-  };
-
   private destroy$ = new Subject<void>();
 
   // Filter state
@@ -177,11 +89,17 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   private pollingTimer: any;
   private toastIdCounter = 0;
   private toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
-  private audioContext?: AudioContext;
-  private formattedTextCache = new Map<string, { source: string; lines: FormattedExtractedLine[] }>();
   private uploadSubscription?: Subscription;
 
-  constructor(private documentService: DocumentService, private auth: AuthService, private router: Router) {}
+  constructor(
+    private documentService: DocumentService,
+    private extractionService: DocumentExtractionService,
+    private formattingService: DocumentFormattingService,
+    private qrCodeService: QRCodeService,
+    private audioService: AudioService,
+    private auth: AuthService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     // Handle search debounce
@@ -227,7 +145,6 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
             return localTs ? { ...item, processed_at: localTs } : item;
           });
           this.documents.set(merged);
-          this.formattedTextCache.clear();
           this.loading.set(false);
           this.error.set('');
           this.lastUpdated.set(new Date());
@@ -262,14 +179,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   formattedExtractedText(doc: DocumentItem): FormattedExtractedLine[] {
     const text = doc.extracted_text ?? '';
-    const cached = this.formattedTextCache.get(doc.id);
-    if (cached && cached.source === text) {
-      return cached.lines;
-    }
-
-    const lines = this.buildFormattedLines(text);
-    this.formattedTextCache.set(doc.id, { source: text, lines });
-    return lines;
+    return this.formattingService.buildFormattedLines(text);
   }
 
   trackFormattedLine(_index: number, line: FormattedExtractedLine): number {
@@ -688,9 +598,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.uploadSubscription?.unsubscribe();
     this.toastTimers.forEach(timeoutId => clearTimeout(timeoutId));
     this.toastTimers.clear();
-    if (this.audioContext) {
-      this.audioContext.close().catch(() => undefined);
-    }
+    this.audioService.stop();
     this.toasts.set([]);
   }
 
@@ -764,130 +672,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   deriveInvoiceDate(doc: DocumentItem): string {
-    const confirmed = this.normalizeDate(doc.confirmed_due_date);
-    if (confirmed) return confirmed;
-
-    const derived = this.normalizeDate(doc.derived_due);
-    if (derived) return derived;
-
-    const text = doc.extracted_text || '';
-    if (!text) return '—';
-
-    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const fallbackDates: string[] = [];
-
-    for (const line of lines) {
-      const normalized = this.stripDiacritics(line).toLowerCase();
-      const candidate = this.findDateInLine(line);
-      if (!candidate) continue;
-
-      if (this.dueKeywords.some(keyword => normalized.includes(keyword))) {
-        return candidate;
-      }
-
-      fallbackDates.push(candidate);
-    }
-
-    return fallbackDates.length ? fallbackDates[0] : '—';
+    return this.extractionService.deriveInvoiceDate(doc);
   }
 
   deriveAmount(doc: DocumentItem): string {
-    if (doc.confirmed_amount) return doc.confirmed_amount;
-    if (doc.derived_amount) return doc.derived_amount;
-
-    const text = doc.extracted_text || '';
-    if (!text) return '—';
-
-    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const candidates: Array<{ value: number; currency?: string; weight: number; confidence: number }> = [];
-
-    // Priority 1: Search for lines with strong amount keywords (and next line if amount not on same line)
-    const strongKeywords = ['total', 'montant', 'betrag', 'amount due', 'due', 'rechnungsbetrag'];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line) continue;
-      const normalized = this.stripDiacritics(line).toLowerCase();
-      const hasStrongKeyword = strongKeywords.some(kw => normalized.includes(kw));
-      if (!hasStrongKeyword) continue;
-
-      // Check amount on same line first
-      let matches = this.extractAmountsFromLine(line);
-      if (matches.length > 0) {
-        for (const match of matches) {
-          if (match.value >= 10 && match.value <= 999999) {
-            const weight = 100 + (match.currency ? 10 : 0) + Math.min(match.value / 100000, 5);
-            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.95 });
-          }
-        }
-      }
-
-      // If no amount on same line, check next line
-      if (matches.length === 0 && i + 1 < lines.length) {
-        const nextLine = lines[i + 1];
-        matches = this.extractAmountsFromLine(nextLine);
-        for (const match of matches) {
-          if (match.value >= 10 && match.value <= 999999) {
-            // Very high weight for amount right after keyword (even higher than same line)
-            const weight = 110 + (match.currency ? 10 : 0) + Math.min(match.value / 100000, 5);
-            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.95 });
-          }
-        }
-      }
-    }
-
-    // Priority 2: Search for lines with general amount keywords
-    if (candidates.length === 0) {
-      for (const line of lines) {
-        if (!line) continue;
-        const normalized = this.stripDiacritics(line).toLowerCase();
-        const hasKeyword = this.amountKeywords.some(keyword => normalized.includes(keyword));
-        if (!hasKeyword) continue;
-
-        const matches = this.extractAmountsFromLine(line);
-        for (const match of matches) {
-          if (match.value >= 10 && match.value <= 999999) {
-            const weight = 50 + (match.currency ? 10 : 0) + Math.min(match.value / 100000, 3);
-            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.80 });
-          }
-        }
-      }
-    }
-
-    // Priority 3: Search for amounts with currency (even without keywords)
-    if (candidates.length === 0) {
-      for (const line of lines) {
-        if (!line) continue;
-        const hasCurrency = /(CHF|EUR|USD|GBP|SEK|NOK|DKK|CAD|AUD|NZD|JPY|CNY|INR|€|\$|£)/i.test(line);
-        if (!hasCurrency) continue;
-
-        const matches = this.extractAmountsFromLine(line);
-        for (const match of matches) {
-          if (match.value >= 10 && match.value <= 999999) {
-            const weight = 30 + (match.currency ? 5 : 0) + Math.min(match.value / 100000, 2);
-            candidates.push({ value: match.value, currency: match.currency, weight, confidence: 0.65 });
-          }
-        }
-      }
-    }
-
-    // Fallback: Last larger amount in the document
-    if (candidates.length === 0) {
-      const allMatches = this.extractAmountsFromLine(text);
-      const largeAmounts = allMatches.filter(m => m.value >= 50 && m.value <= 999999);
-      if (largeAmounts.length > 0) {
-        // Pick the last (latest) large amount
-        const last = largeAmounts[largeAmounts.length - 1];
-        candidates.push({ value: last.value, currency: last.currency, weight: 5, confidence: 0.40 });
-      }
-    }
-
-    if (!candidates.length) {
-      return '—';
-    }
-
-    candidates.sort((a, b) => b.weight - a.weight || b.value - a.value);
-    const best = candidates[0];
-    return this.formatAmountValue(best.value, best.currency);
+    return this.extractionService.deriveAmount(doc);
   }
 
   derivePaidStatus(doc: DocumentItem): string {
@@ -924,11 +713,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   private async generateQRCode(docId: string, data: string): Promise<void> {
     try {
-      const dataUrl = await QRCode.toDataURL(data, {
-        width: 200,
-        margin: 2,
-        errorCorrectionLevel: 'M'
-      });
+      const dataUrl = await this.qrCodeService.generateQRCode(data);
       this.qrCodeUrls.update(map => {
         const newMap = new Map(map);
         newMap.set(docId, dataUrl);
@@ -936,276 +721,6 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       });
     } catch (err) {
       console.error('Failed to generate QR code:', err);
-    }
-  }
-
-  private findDateInLine(line: string): string | null {
-    if (!line) return null;
-    const fragments = [
-      /\d{4}-\d{2}-\d{2}/g,
-      /\d{4}[.\/]\d{1,2}[.\/]\d{1,2}/g,
-      /\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}/g,
-      /\d{1,2}\.\s*[A-Za-zÄÖÜäöüß.]+\s*\d{2,4}/g,
-      /[A-Za-zÄÖÜäöüß.]+\s+\d{1,2}(?:\s*,)?\s*\d{2,4}/g
-    ];
-
-    for (const pattern of fragments) {
-      pattern.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = pattern.exec(line)) !== null) {
-        const normalized = this.normalizeDate(match[0]);
-        if (normalized) {
-          return normalized;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  private normalizeDate(input?: string | null): string | null {
-    if (!input) return null;
-    let candidate = input.trim();
-    if (!candidate) return null;
-
-    const isoDateTime = candidate.match(/^(\d{4}-\d{2}-\d{2})[T\s]/);
-    if (isoDateTime) {
-      candidate = isoDateTime[1];
-    }
-
-    candidate = candidate.replace(/\s+/g, ' ');
-
-    let parts = candidate.match(/^(\d{4})[.\/-](\d{1,2})[.\/-](\d{1,2})$/);
-    if (parts) {
-      return this.formatDateParts(
-        parseInt(parts[3], 10),
-        parseInt(parts[2], 10),
-        parseInt(parts[1], 10)
-      );
-    }
-
-    parts = candidate.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/);
-    if (parts) {
-      return this.formatDateParts(
-        parseInt(parts[1], 10),
-        parseInt(parts[2], 10),
-        parseInt(parts[3], 10)
-      );
-    }
-
-    parts = this.stripDiacritics(candidate).match(/^(\d{1,2})\.?\s*([A-Za-z]+)\s+(\d{2,4})$/);
-    if (parts) {
-      const month = this.monthFromName(parts[2]);
-      if (month) {
-        return this.formatDateParts(
-          parseInt(parts[1], 10),
-          month,
-          parseInt(parts[3], 10)
-        );
-      }
-    }
-
-    parts = this.stripDiacritics(candidate).match(/^([A-Za-z]+)\s+(\d{1,2})(?:\s*,)?\s*(\d{2,4})$/);
-    if (parts) {
-      const month = this.monthFromName(parts[1]);
-      if (month) {
-        return this.formatDateParts(
-          parseInt(parts[2], 10),
-          month,
-          parseInt(parts[3], 10)
-        );
-      }
-    }
-
-    return null;
-  }
-
-  private formatDateParts(day: number, month: number, year: number): string | null {
-    if (!day || !month || !year) return null;
-    if (month < 1 || month > 12) return null;
-    if (day < 1 || day > 31) return null;
-    if (year < 100) {
-      year += year >= 70 ? 1900 : 2000;
-    }
-    const dd = day.toString().padStart(2, '0');
-    const mm = month.toString().padStart(2, '0');
-    const yyyy = year.toString().padStart(4, '0');
-    return `${dd}.${mm}.${yyyy}`;
-  }
-
-  private monthFromName(token: string): number | null {
-    if (!token) return null;
-    const sanitized = this.stripDiacritics(token).toLowerCase().replace(/\./g, '');
-    return this.monthLookup[sanitized] ?? null;
-  }
-
-  private stripDiacritics(value: string): string {
-    if (!value) return '';
-    if (typeof value.normalize === 'function') {
-      return value
-        .normalize('NFD')
-        .replace(/[ -]/g, '')
-        .replace(/[-]/g, '')
-        .replace(/[ -]/g, '')
-        .replace(/[\u0300-\u036f]/g, '');
-    }
-    return value
-      .replace(/[äÄ]/g, 'ae')
-      .replace(/[öÖ]/g, 'oe')
-      .replace(/[üÜ]/g, 'ue')
-      .replace(/[ß]/g, 'ss');
-  }
-
-  private buildFormattedLines(text: string): FormattedExtractedLine[] {
-    if (!text) return [];
-
-    const lines = text.split(/\r?\n/);
-    const formatted: FormattedExtractedLine[] = [];
-
-    for (let index = 0; index < lines.length; index++) {
-      const raw = lines[index] ?? '';
-      const trimmed = raw.trim();
-      const normalized = this.stripDiacritics(trimmed).toLowerCase();
-      const classList: string[] = [];
-
-      if (!trimmed) {
-        classList.push('is-blank');
-      } else {
-        const hasDueKeyword = this.dueKeywords.some(keyword => normalized.includes(keyword));
-        const hasAmountKeyword = this.amountKeywords.some(keyword => normalized.includes(keyword));
-        const containsDate = Boolean(this.findDateInLine(trimmed));
-        const containsAmount = this.extractAmountsFromLine(trimmed).length > 0;
-
-        if (hasDueKeyword) classList.push('has-due-keyword');
-        if (hasAmountKeyword) classList.push('has-amount-keyword');
-        if (containsDate) classList.push('contains-date');
-        if (containsAmount) classList.push('contains-amount');
-
-        if (classList.length) {
-          classList.push('is-highlighted');
-        }
-      }
-
-      formatted.push({
-        index,
-        text: trimmed ? trimmed.replace(/\s{2,}/g, ' ') : '',
-        classList
-      });
-    }
-
-    return formatted;
-  }
-
-  private extractAmountsFromLine(text: string): Array<{ value: number; currency?: string }> {
-    if (!text) return [];
-    const results: Array<{ value: number; currency?: string }> = [];
-    const numberRegex = /-?\d{1,3}(?:[’'\s.,]\d{3})*(?:[.,]\d{2}|[.,][-–—])?/g;
-    let match: RegExpExecArray | null;
-    while ((match = numberRegex.exec(text)) !== null) {
-      let raw = match[0];
-      if (/[.,][-–—]$/.test(raw)) {
-        raw = raw.slice(0, -2) + (raw.includes(',') ? ',00' : '.00');
-      }
-
-      const numeric = this.parseAmountValue(raw);
-      
-      // Skip invalid amounts
-      if (!Number.isFinite(numeric)) continue;
-      
-      // Skip amounts that are clearly not invoice amounts
-      // Too small (< 0.5) or too large (> 1,000,000)
-      if (numeric < 0.5 || numeric > 1000000) continue;
-
-      const before = text.slice(Math.max(0, match.index - 10), match.index);
-      const after = text.slice(match.index + match[0].length, match.index + match[0].length + 10);
-      const currency = this.detectCurrency(before) || this.detectCurrency(after);
-      results.push({ value: Math.abs(numeric), currency });
-    }
-    return results;
-  }
-
-  private parseAmountValue(raw: string): number {
-    if (!raw) return NaN;
-    let cleaned = raw
-      .replace(/’/g, "'")
-      .replace(/[\s']/g, '')
-      .replace(/−/g, '-')
-      .replace(/–/g, '-')
-      .replace(/—/g, '-');
-
-    const lastCommaIdx = cleaned.lastIndexOf(',');
-    const lastDotIdx = cleaned.lastIndexOf('.');
-    const commaIsDecimal = lastCommaIdx > -1 && (lastDotIdx === -1 || lastCommaIdx > lastDotIdx) && 
-                          cleaned.slice(lastCommaIdx + 1).match(/^\d{2}(?:\D|$)/);
-    
-    if (commaIsDecimal) {
-      cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
-    } else if (lastDotIdx > lastCommaIdx && lastCommaIdx > -1) {
-      cleaned = cleaned.replace(/,/g, '');
-    } else if (lastCommaIdx > -1) {
-      const afterComma = cleaned.slice(lastCommaIdx + 1).match(/^\d+/);
-      if (afterComma && afterComma[0].length === 2) {
-        cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
-      } else {
-        cleaned = cleaned.replace(/,/g, '');
-      }
-    } else {
-      cleaned = cleaned.replace(/,/g, '');
-    }
-
-    cleaned = cleaned.replace(/[^0-9.-]/g, '');
-    return parseFloat(cleaned);
-  }
-
-  private detectCurrency(fragment: string): string | undefined {
-    if (!fragment) return undefined;
-    const match = fragment.match(/(SFR|FR\.?|CHF|EUR|USD|CAD|AUD|NZD|GBP|SEK|NOK|DKK|JPY|CNY|INR|€|\$|£)/i);
-    if (!match) return undefined;
-    return this.resolveCurrency(match[1]);
-  }
-
-  private resolveCurrency(token?: string): string | undefined {
-    if (!token) return undefined;
-    const trimmed = token.trim();
-    if (!trimmed) return undefined;
-    const upper = trimmed.toUpperCase();
-    if (upper === '€') return 'EUR';
-    if (upper === '$' || upper === 'US$') return 'USD';
-    if (upper.endsWith('$')) {
-      const code = upper.replace(/\$/g, '');
-      if (this.supportedCurrencies.has(code)) {
-        return code;
-      }
-    }
-    if (upper === '£') return 'GBP';
-    if (upper === 'SFR' || upper === 'FR.' || upper === 'FR' || upper === 'CHF') return 'CHF';
-    if (this.supportedCurrencies.has(upper)) {
-      return upper;
-    }
-    return undefined;
-  }
-
-  private formatAmountValue(value: number, currency?: string): string {
-    if (!Number.isFinite(value)) {
-      return '—';
-    }
-    const absolute = Math.abs(value);
-    try {
-      if (currency && this.supportedCurrencies.has(currency)) {
-        return new Intl.NumberFormat('de-CH', {
-          style: 'currency',
-          currency,
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        }).format(absolute);
-      }
-
-      return new Intl.NumberFormat('de-CH', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(absolute);
-    } catch {
-      return (currency ? `${currency} ` : '') + absolute.toFixed(2);
     }
   }
 
@@ -1274,40 +789,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   private playToastSound(tone: 'success' | 'info' | 'error'): void {
-    try {
-      if (typeof window === 'undefined') return;
-      const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (!Ctor) return;
-      if (!this.audioContext) {
-        this.audioContext = new Ctor();
-      }
-
-      const ctx = this.audioContext;
-      if (!ctx) return;
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => undefined);
-      }
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      const frequency = tone === 'success' ? 880 : tone === 'error' ? 220 : 660;
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(frequency, ctx.currentTime);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.8);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + 0.8);
-      osc.onended = () => {
-        osc.disconnect();
-        gain.disconnect();
-      };
-    } catch (err) {
-      console.warn('Toast sound could not be played', err);
-    }
+    this.audioService.playToastSound(tone);
   }
 }
+
+
