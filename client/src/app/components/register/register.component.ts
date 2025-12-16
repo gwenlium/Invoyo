@@ -38,7 +38,7 @@ import { AuthService } from '../../services/auth.service';
     h2 { margin: 0 0 6px; }
     label { display: grid; gap: 4px; font-size: 0.95rem; }
     input { padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
-    button { padding: 0.6rem 1rem; border-radius: 20px; border: 1px solid #ddd; cursor: pointer; }
+    button { padding: 0.6rem 1rem; border-radius: 20px; border: 1px solid #ddd; cursor: pointer; margin-top: 10px; }
     .primary { background-color: #22c55e; color: white; border-color: #22c55e; }
     .ghost { background: transparent; }
     .error { color: #b00020; margin: 0; }

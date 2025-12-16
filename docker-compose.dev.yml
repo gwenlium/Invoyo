@@ -18,6 +18,16 @@ services:
       - ./app:/home/app/app
     networks:
       - app-network
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /home/app/app
+          ignore:
+            - __pycache__/
+            - "*.pyc"
+        - action: rebuild
+          path: ./requirements.txt
 
   db:
     image: postgres:15-alpine
@@ -55,6 +65,13 @@ services:
       - /app/.angular
     networks:
       - app-network
+    develop:
+      watch:
+        - action: sync
+          path: ./client/src
+          target: /app/src
+        - action: rebuild
+          path: ./client/package.json
 
 networks:
   app-network:
