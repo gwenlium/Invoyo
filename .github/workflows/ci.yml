@@ -69,7 +69,18 @@ jobs:
         ACCESS_TOKEN_EXPIRE_MINUTES: 30
         RATE_LIMIT_ENABLED: "false"
       run: |
-        pytest tests/ -v --cov=app --cov-report=xml --cov-report=term
+        pytest tests/test_backend.py -v --cov=app --cov-report=xml --cov-report=term
+    
+    - name: Run frontend integration tests
+      env:
+        DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb
+        REDIS_URL: redis://localhost:6379/0
+        SECRET_KEY: test-secret-key-for-ci
+        ALGORITHM: HS256
+        ACCESS_TOKEN_EXPIRE_MINUTES: 30
+        RATE_LIMIT_ENABLED: "false"
+      run: |
+        pytest tests/test_frontend.py -v --cov=app --cov-report=xml --cov-report=term
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3

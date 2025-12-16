@@ -53,6 +53,7 @@ HTTP Request → Route → Schema Validation → Service → Model → Database
 - Rate limiting on auth endpoints
 - Role-based access control
 - Audit logging for security events
+- Admin Panel for overview with guards
 
 ## Testing
 
