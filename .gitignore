@@ -13,6 +13,9 @@ app/storage/
 *.png
 *.gif
 
+# Allow repository branding assets
+!IMG_6221.PNG
+
 # Python
 __pycache__/
 *.py[cod]
