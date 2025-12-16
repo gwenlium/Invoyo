@@ -205,10 +205,10 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         document.execCommand('copy');
         document.body.removeChild(textarea);
       }
-      this.triggerToast('Extracted text copied', { background: '#2563eb', color: '#ffffff', sound: 'info' });
+      this.triggerToast('Extracted text copied', { background: '#2563eb', color: '#ffffff' });
     } catch (err) {
       console.error('Failed to copy extracted text:', err);
-      this.triggerToast('Could not copy text', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+      this.triggerToast('Could not copy text', { background: '#ef4444', color: '#ffffff' });
     }
   }
 
@@ -341,11 +341,11 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           return next;
         });
         this.documents.update(docs => docs.filter(d => d.id !== doc.id));
-        this.triggerToast('File deleted', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+        this.triggerToast('File deleted', { background: '#ef4444', color: '#ffffff' });
         this.cancelDelete(event);
       },
       error: () => {
-        this.triggerToast('Failed to delete document', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+        this.triggerToast('Failed to delete document', { background: '#ef4444', color: '#ffffff' });
         this.cancelDelete(event);
       }
     });
@@ -398,8 +398,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
           this.triggerToast(`File uploaded: ${event.body?.filename || file.name}`, {
             background: '#22c55e',
-            color: '#ffffff',
-            sound: 'success'
+            color: '#ffffff'
           });
 
           if (completed === total) {
@@ -414,7 +413,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         this.isUploading.set(false);
         this.uploadProgress.set(0);
         this.uploadMessage.set('');
-        this.triggerToast('Upload failed', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+        this.triggerToast('Upload failed', { background: '#ef4444', color: '#ffffff' });
       },
       complete: () => {
         this.isUploading.set(false);
@@ -477,9 +476,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
         // Update local state and stamp modified
         this.setClientModified(stamped.id, stamped);
         this.editingDocId.set(null);
-        this.triggerToast('Invoice details saved', { background: '#22c55e', color: '#ffffff', sound: 'success' });
+        this.triggerToast('Invoice details saved', { background: '#22c55e', color: '#ffffff' });
       },
-      error: () => this.triggerToast('Failed to save invoice details', { background: '#ef4444', color: '#ffffff', sound: 'error' })
+      error: () => this.triggerToast('Failed to save invoice details', { background: '#ef4444', color: '#ffffff' })
     });
   }
 
@@ -493,9 +492,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Marked as paid', { background: '#22c55e', color: '#ffffff', sound: 'success' });
+        this.triggerToast('Marked as paid', { background: '#22c55e', color: '#ffffff' });
       },
-      error: () => this.triggerToast('Failed to mark as paid', { background: '#ef4444', color: '#ffffff', sound: 'error' })
+      error: () => this.triggerToast('Failed to mark as paid', { background: '#ef4444', color: '#ffffff' })
     });
   }
 
@@ -509,9 +508,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Archived', { background: '#3b82f6', color: '#ffffff', sound: 'info' });
+        this.triggerToast('Archived', { background: '#3b82f6', color: '#ffffff' });
       },
-      error: () => this.triggerToast('Failed to archive document', { background: '#ef4444', color: '#ffffff', sound: 'error' })
+      error: () => this.triggerToast('Failed to archive document', { background: '#ef4444', color: '#ffffff' })
     });
   }
 
@@ -531,9 +530,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Marked as unpaid', { background: '#f97316', color: '#ffffff', sound: 'info' });
+        this.triggerToast('Marked as unpaid', { background: '#f97316', color: '#ffffff' });
       },
-      error: () => this.triggerToast('Failed to mark as unpaid', { background: '#ef4444', color: '#ffffff', sound: 'error' })
+      error: () => this.triggerToast('Failed to mark as unpaid', { background: '#ef4444', color: '#ffffff' })
     });
   }
 
@@ -548,9 +547,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       next: (updatedDoc) => {
         const stamped = { ...updatedDoc, processed_at: updatedDoc.processed_at ?? new Date().toISOString() };
         this.setClientModified(stamped.id, stamped);
-        this.triggerToast('Unarchived', { background: '#3b82f6', color: '#ffffff', sound: 'info' });
+        this.triggerToast('Unarchived', { background: '#3b82f6', color: '#ffffff' });
       },
-      error: () => this.triggerToast('Failed to unarchive', { background: '#ef4444', color: '#ffffff', sound: 'error' })
+      error: () => this.triggerToast('Failed to unarchive', { background: '#ef4444', color: '#ffffff' })
     });
   }
 
@@ -579,7 +578,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.openingFileId.set(null);
-        this.triggerToast('Failed to open file', { background: '#ef4444', color: '#ffffff', sound: 'error' });
+        this.triggerToast('Failed to open file', { background: '#ef4444', color: '#ffffff' });
       }
     });
   }
@@ -726,7 +725,7 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
 
   private triggerToast(
     message: string,
-    palette: { background?: string; color?: string; sound?: 'success' | 'info' | 'error' } = {}
+    palette: { background?: string; color?: string } = {}
   ): void {
     const id = ++this.toastIdCounter;
     const background = this.withAlpha(palette.background ?? '#2563eb', 0.9);
@@ -734,7 +733,9 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.toasts.update(list => [...list, { id, message, background, color, leaving: false }]);
     const timeoutId = setTimeout(() => this.startToastExit(id), 3500);
     this.toastTimers.set(id, timeoutId);
-    this.playToastSound(palette.sound ?? 'info');
+    // Determine sound type from background color for audio feedback
+    const soundType = palette.background?.includes('22c55e') ? 'success' : palette.background?.includes('ef4444') ? 'error' : 'info';
+    this.audioService.playToastSound(soundType);
   }
 
   private startToastExit(id: number): void {
@@ -786,10 +787,6 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     const b = parseInt(hex.substring(4, 6), 16);
     const clampedAlpha = Math.min(1, Math.max(0, alpha));
     return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
-  }
-
-  private playToastSound(tone: 'success' | 'info' | 'error'): void {
-    this.audioService.playToastSound(tone);
   }
 }
 

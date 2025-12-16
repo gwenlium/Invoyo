@@ -24,8 +24,9 @@ services:
           path: ./app
           target: /home/app/app
           ignore:
-            - __pycache__/
+            - __pycache__
             - "*.pyc"
+            - .pytest_cache
         - action: rebuild
           path: ./requirements.txt
 

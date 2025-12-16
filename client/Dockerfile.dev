@@ -16,5 +16,9 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 4200
 
+# Enable polling for file changes (useful for Docker Desktop on Windows)
+ENV CHOKIDAR_USEPOLLING=true
+ENV CHOKIDAR_INTERVAL=1000
+
 # Start the Angular development server with host 0.0.0.0 to allow external connections
 CMD ["npm", "run", "start", "--", "--host", "0.0.0.0", "--proxy-config", "proxy.conf.json"]
