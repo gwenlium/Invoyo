@@ -29,6 +29,7 @@
       </div>
       <div class="user-controls">
         <span class="user-pill">{{ currentUsername }}</span>
+        <button *ngIf="isAdmin()" class="ghost small glow" type="button" (click)="goToAdminPanel()">Admin Panel</button>
         <button class="ghost small glow" type="button" (click)="logout()">Logout</button>
       </div>
     </div>
@@ -72,8 +73,9 @@
             <td>
               <div class="status-container">
                 <span *ngIf="doc.status === 'paid'" class="status status-paid">Paid</span>
+                <span *ngIf="doc.status === 'unpaid'" class="status status-unpaid">Unpaid</span>
                 <span *ngIf="doc.status === 'saved' && !hasExtractedData(doc)" class="status status-saved">Saved</span>
-                <span *ngIf="showUnpaidLabel(doc)" class="status status-unpaid">Unpaid</span>
+                <span *ngIf="doc.status === 'saved' && hasExtractedData(doc)" class="status status-unpaid">Unpaid</span>
                 <span *ngIf="doc.status === 'archived'" class="status status-archived">Archived</span>
               </div>
             </td>
@@ -124,7 +126,7 @@
                   </div>
                   <div class="edit-actions">
                     <button class="primary small glow" (click)="saveEdit(doc, $event)">Save</button>
-                    <button class="secondary small glow" (click)="cancelEdit($event)">Cancel</button>
+                    <button class="white small" (click)="cancelEdit($event)">Cancel</button>
                   </div>
                 </div>
 

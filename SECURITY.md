@@ -27,6 +27,58 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 - `DATABASE_URL`, `REDIS_URL`, `CELERY_*`
 - `UPLOAD_DIRECTORY`, `MAX_UPLOAD_SIZE_MB`
 - `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS`, `LOG_LEVEL`
+- `ADMIN_EMAILS` (optional; comma-separated list of emails to auto-promote to admin on registration)
+
+## Admin Management
+
+Invoyo uses a **hybrid approach** for admin role assignment:
+
+### 1. **First User Becomes Admin** (Default)
+The first registered user automatically becomes an admin. Subsequent users register as regular users.
+
+**Use case**: Self-hosted single-owner deployments
+
+### 2. **Environment Variable Configuration** (Recommended for Teams)
+Set `ADMIN_EMAILS` environment variable with comma-separated email addresses:
+
+```bash
+# .env
+ADMIN_EMAILS=admin@company.com,superuser@company.com
+```
+
+Users registering with these emails automatically become admins. Useful for:
+- Team deployments with multiple admins
+- Headless/automated deployments
+- Docker/Kubernetes with predefined admins
+
+### 3. **Runtime Admin Management** (API-Based)
+Once logged in, admins can manage other admins via the API:
+
+**Promote a user to admin:**
+```bash
+POST /auth/admin/promote/{user_id}
+Authorization: Bearer <admin-token>
+```
+
+**Demote an admin to regular user:**
+```bash
+POST /auth/admin/demote/{user_id}
+Authorization: Bearer <admin-token>
+# Note: Cannot demote the last remaining admin
+```
+
+**List all users:**
+```bash
+GET /auth/admin/users
+Authorization: Bearer <admin-token>
+```
+
+### Security Notes
+- Only users with the `admin` role can execute admin endpoints
+- Regular users cannot self-promote or access user management endpoints
+- The system prevents demoting the last remaining admin to avoid lockouts
+- All admin actions are logged to the audit trail
+- Email matching for `ADMIN_EMAILS` is case-insensitive
 
 ## Operational Checklist
 - [ ] Strong `SECRET_KEY` configured; secrets stored out of VCS

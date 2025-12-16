@@ -208,6 +208,15 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.router.navigateByUrl('/login');
   }
 
+  isAdmin(): boolean {
+    const user = this.auth.getCurrentUser();
+    return user?.role === 'admin';
+  }
+
+  goToAdminPanel() {
+    this.router.navigate(['/admin']);
+  }
+
   startPolling() {
     this.fetchDocuments().subscribe({
       next: (resp) => {
@@ -232,9 +241,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
           }
         }
 
-        // Poll if active work exists (pending/processing) or if we have saved docs that might be getting processed
+        // Poll if we have saved docs that might still be getting processed
         const hasActiveWork = resp.items.some(d => 
-          ['pending', 'processing'].includes(d.status) || 
           (d.status === 'saved' && (!d.extracted_text || d.extracted_text.trim().length === 0))
         );
         
@@ -323,13 +331,13 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (tab !== 'all') {
       docs = docs.filter(doc => {
         if (tab === 'unpaid') {
-          return ['pending', 'processing', 'processed', 'failed'].includes(doc.status);
+          return doc.status === 'unpaid' || doc.status === 'saved';
         }
         if (tab === 'paid') {
           return doc.status === 'paid';
         }
         if (tab === 'archived') {
-          return doc.status === 'archived';
+          return doc.status === 'archived' || doc.status === 'unarchived';
         }
         return true;
       });
@@ -602,12 +610,12 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     this.archiveDocument(doc, event);
   }
 
-  // Allow marking a document as unpaid (revert to processed/unpaid state).
+  // Allow marking a document as unpaid (revert to unpaid state).
   markAsUnpaid(doc: DocumentItem, event?: Event): void {
     if (event) event.stopPropagation();
     this.justExpandedDocId.set(null); // Prevent animation on status change
     this.documentService.update(doc.id, { 
-      status: 'processed',
+      status: 'unpaid',
       processed_at: new Date().toISOString()
     }).subscribe({
       next: (updatedDoc) => {
@@ -695,28 +703,34 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     switch (status) {
       case 'paid':
         return 'status-paid';
+      case 'unpaid':
+        return 'status-unpaid';
       case 'archived':
         return 'status-archived';
+      case 'unarchived':
+        return 'status-unarchived';
       case 'saved':
         return 'status-saved';
-      case 'processed':
-        return 'status-modified';
-      case 'processing':
-        return 'status-processing';
-      case 'pending':
-        return 'status-pending';
-      case 'failed':
       default:
-        return 'status-failed';
+        return 'status-default';
     }
   }
 
   statusLabel(status: DocumentItem['status']): string {
-    if (status === 'saved') return 'Saved';
-    if (status === 'processed') return 'Modified';
-    if (status === 'paid') return 'Paid';
-    if (status === 'archived') return 'Archived';
-    return status;
+    switch (status) {
+      case 'saved':
+        return 'Saved';
+      case 'paid':
+        return 'Paid';
+      case 'unpaid':
+        return 'Unpaid';
+      case 'archived':
+        return 'Archived';
+      case 'unarchived':
+        return 'Unarchived';
+      default:
+        return status;
+    }
   }
 
   formatLocalDateTime(date: Date): string {
@@ -881,8 +895,8 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
     if (doc.derived_paid) return doc.derived_paid;
     const text = (doc.extracted_text || '').toLowerCase();
     if (text.includes('bezahlt') || text.includes('paid')) return 'Paid';
-    // For processed or saved documents, default to unpaid
-    if (doc.status === 'processed' || doc.status === 'saved') return 'Unpaid';
+    // For unpaid or saved documents, default to unpaid
+    if (doc.status === 'unpaid' || doc.status === 'saved') return 'Unpaid';
     // For any document with extracted text or derived_amount, default to unpaid if not marked paid
     if (doc.extracted_text || doc.derived_amount) return 'Unpaid';
     return 'Pending';
@@ -893,13 +907,15 @@ export class InvoiceListComponent implements OnInit, OnDestroy {
   }
 
   showUnpaidLabel(doc: DocumentItem): boolean {
-    // Show Unpaid label only for documents that are NOT paid and NOT archived
-    // and have extracted data (processed or saved with data)
-    if (doc.status === 'paid' || doc.status === 'archived') {
-      return false;
+    // Show Unpaid label for documents explicitly marked as unpaid
+    if (doc.status === 'unpaid') {
+      return true;
     }
-    // Show for processed status, or saved status with extracted data
-    return doc.status === 'processed' || (doc.status === 'saved' && this.hasExtractedData(doc));
+    // Also show for saved documents with extracted data (processing)
+    if (doc.status === 'saved' && this.hasExtractedData(doc)) {
+      return true;
+    }
+    return false;
   }
 
   getQRCodeUrl(docId: string): string | undefined {

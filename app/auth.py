@@ -12,6 +12,7 @@ from slowapi.util import get_remote_address
 from .database import get_db
 from .models import User, UserRole
 from .schemas import UserRegister, UserLogin, Token, TokenRefresh, UserResponse
+from .config import get_settings
 from .security import (
     verify_password,
     create_access_token,
@@ -51,6 +52,11 @@ async def register_user(
     - **password**: Requires upper, lower, and a digit (no min length enforced)
     
     Returns the created user (excluding password).
+    
+    User role assignment:
+    1. If email is in ADMIN_EMAILS environment variable → admin
+    2. Else if this is the first user → admin
+    3. Else → regular user
     """
     # Check if email already exists
     if get_user_by_email(db, user_data.email):
@@ -80,23 +86,31 @@ async def register_user(
             detail="Username already taken"
         )
     
-    # Create new user (first user is admin, rest are regular users)
-    user_count = db.query(User).count()
-    is_first_user = user_count == 0
+    # Determine user role based on admin email configuration and user count
+    settings = get_settings()
+    admin_emails_list = [email.strip().lower() for email in settings.admin_emails.split(',') if email.strip()]
+    
+    # Check if this email is in the admin emails list
+    is_admin_email = user_data.email.lower() in admin_emails_list
+    
+    # Fall back to first user logic if no admin emails configured
+    is_first_user = db.query(User).count() == 0
+    
+    user_role = UserRole.ADMIN if (is_admin_email or is_first_user) else UserRole.USER
     
     new_user = create_user(
         db,
         email=user_data.email,
         username=user_data.username,
         password=user_data.password,
-        role=UserRole.ADMIN if is_first_user else UserRole.USER
+        role=user_role
     )
     
     log_audit_event(
         "user_registered",
         user_id=new_user.id,
         action="register",
-        details={"username": new_user.username, "role": new_user.role.value},
+        details={"username": new_user.username, "role": new_user.role.value, "admin_email_match": is_admin_email},
         status="success"
     )
     
@@ -247,3 +261,158 @@ async def get_current_user_info(
         )
     
     return user
+
+
+# Admin Management Endpoints
+
+@router.post("/admin/promote/{user_id}", response_model=UserResponse)
+async def promote_user_to_admin(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Promote a user to admin role. Only admins can perform this action.
+    
+    - **user_id**: UUID of the user to promote
+    
+    Returns the updated user.
+    """
+    # Check if current user is admin
+    admin = db.query(User).filter(User.id == current_user["user_id"]).first()
+    if not admin or admin.role != UserRole.ADMIN:
+        log_audit_event(
+            "admin_promotion_failed",
+            user_id=current_user["user_id"],
+            action="promote_to_admin",
+            details={"target_user_id": user_id, "reason": "unauthorized"},
+            status="rejected"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can promote users"
+        )
+    
+    # Find the user to promote
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Promote to admin
+    user.role = UserRole.ADMIN
+    db.commit()
+    db.refresh(user)
+    
+    log_audit_event(
+        "user_promoted_to_admin",
+        user_id=current_user["user_id"],
+        resource_id=user_id,
+        action="promote_to_admin",
+        details={"promoted_user": user.username},
+        status="success"
+    )
+    
+    logger.info(f"User {user.username} promoted to admin by {admin.username}")
+    
+    return user
+
+
+@router.post("/admin/demote/{user_id}", response_model=UserResponse)
+async def demote_user_from_admin(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Demote an admin user to regular user role. Only admins can perform this action.
+    
+    - **user_id**: UUID of the admin to demote
+    
+    Returns the updated user.
+    """
+    # Check if current user is admin
+    admin = db.query(User).filter(User.id == current_user["user_id"]).first()
+    if not admin or admin.role != UserRole.ADMIN:
+        log_audit_event(
+            "admin_demotion_failed",
+            user_id=current_user["user_id"],
+            action="demote_from_admin",
+            details={"target_user_id": user_id, "reason": "unauthorized"},
+            status="rejected"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can demote users"
+        )
+    
+    # Find the user to demote
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Prevent demoting the last admin
+    admin_count = db.query(User).filter(User.role == UserRole.ADMIN).count()
+    if user.role == UserRole.ADMIN and admin_count == 1:
+        log_audit_event(
+            "admin_demotion_failed",
+            user_id=current_user["user_id"],
+            action="demote_from_admin",
+            details={"target_user_id": user_id, "reason": "last_admin"},
+            status="rejected"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot demote the last remaining admin"
+        )
+    
+    # Demote to regular user
+    user.role = UserRole.USER
+    db.commit()
+    db.refresh(user)
+    
+    log_audit_event(
+        "user_demoted_from_admin",
+        user_id=current_user["user_id"],
+        resource_id=user_id,
+        action="demote_from_admin",
+        details={"demoted_user": user.username},
+        status="success"
+    )
+    
+    logger.info(f"User {user.username} demoted from admin by {admin.username}")
+    
+    return user
+
+
+@router.get("/admin/users", response_model=list[UserResponse])
+async def list_all_users(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    List all users. Only admins can access this endpoint.
+    
+    Returns a list of all users in the system.
+    """
+    # Check if current user is admin
+    admin = db.query(User).filter(User.id == current_user["user_id"]).first()
+    if not admin or admin.role != UserRole.ADMIN:
+        log_audit_event(
+            "user_list_access_denied",
+            user_id=current_user["user_id"],
+            action="list_users",
+            status="rejected"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can list users"
+        )
+    
+    users = db.query(User).all()
+    return users

@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db, init_db
-from .models import Document, DocumentStatus as DBDocumentStatus, Base
-from .schemas import DocumentResponse, DocumentStatus, DocumentListResponse, DocumentUpdate
+from .models import Document, DocumentStatus, Base
+from .schemas import DocumentResponse, DocumentListResponse, DocumentUpdate
 from .legacy_services import (
     ocr_service,
     file_storage_service,
@@ -69,27 +69,31 @@ async def startup_event():
         init_db()
         logger.info("Database initialized successfully")
         
-        # Run migrations - Add SAVED to documentstatus enum
+        # Handle enum migration if needed
         from .database import engine
         try:
-            # Use raw connection to execute ALTER TYPE with AUTOCOMMIT
             conn = engine.raw_connection()
             try:
-                # Set isolation level to 0 for AUTOCOMMIT
                 original_isolation = conn.isolation_level
                 conn.set_isolation_level(0)
                 try:
                     cursor = conn.cursor()
                     try:
-                        # Try to add 'saved' value to enum
-                        cursor.execute("ALTER TYPE documentstatus ADD VALUE 'saved';")
-                        logger.info("Added 'saved' value to documentstatus enum")
-                    except Exception as enum_err:
-                        error_msg = str(enum_err).lower()
-                        if "already exists" in error_msg or "duplicate" in error_msg:
-                            logger.info("'saved' value already exists in documentstatus enum")
-                        else:
-                            logger.warning(f"Could not add 'saved' to enum: {enum_err}")
+                        # Try to add new enum values if they don't exist
+                        required_values = ['paid', 'unpaid', 'archived', 'unarchived', 'saved']
+                        for value in required_values:
+                            try:
+                                cursor.execute(f"ALTER TYPE documentstatus ADD VALUE IF NOT EXISTS '{value}';")
+                            except Exception as e:
+                                # PostgreSQL 12 doesn't support IF NOT EXISTS
+                                # Fall back to regular add and ignore duplicate errors
+                                error_msg = str(e).lower()
+                                if "already exists" not in error_msg and "duplicate" not in error_msg:
+                                    if "does not exist" not in error_msg:
+                                        logger.debug(f"Enum value '{value}': {e}")
+                    except Exception as e:
+                        # Enum doesn't exist yet, will be created by init_db
+                        logger.debug(f"Enum migration: {e}")
                     finally:
                         cursor.close()
                 finally:
@@ -97,11 +101,11 @@ async def startup_event():
             finally:
                 conn.close()
         except Exception as e:
-            logger.warning(f"Migration error: {e}")
+            logger.debug(f"Enum setup: {e}")
                     
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}", exc_info=True)
-        raise
+        # Don't raise - allow app to start even if enum is problematic
 
 # Health check endpoint
 @app.get("/health")
@@ -186,10 +190,11 @@ async def upload_document(
                 )
             except Exception as e:
                 logger.error(f"OCR processing failed: {e}")
+                # Keep document in 'saved' status with error message
                 document_service.update_document_processing(
                     db,
                     file_id,
-                    DocumentStatus.FAILED,
+                    DocumentStatus.SAVED,
                     error_message=str(e)
                 )
         
@@ -315,7 +320,7 @@ async def list_documents(
     
     - **skip**: Number of documents to skip (pagination)
     - **limit**: Maximum documents to return (max 100)
-    - **status_filter**: Filter by status (pending, processing, processed, failed)
+    - **status_filter**: Filter by status (paid, unpaid, archived, unarchived, saved)
     - **search_query**: Search by filename or extracted text
     """
     limit = min(limit, 100)  # Prevent abuse
@@ -325,7 +330,7 @@ async def list_documents(
     
     if status_filter:
         try:
-            status_enum = DBDocumentStatus[status_filter.upper()]
+            status_enum = DocumentStatus[status_filter.upper()]
             query = query.filter(Document.status == status_enum)
         except KeyError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status_filter}")
@@ -386,23 +391,34 @@ async def update_document(
 @app.delete(
     "/documents/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a document (Admin Only)"
+    summary="Delete a document"
 )
 async def delete_document(
     document_id: str,
-    current_user: dict = Depends(get_current_admin_user),  # ADMIN ONLY
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Delete a document and its stored file.
     
-    **Requires admin role** - demonstrates role-based access control (RBAC).
+    Users can delete their own documents.
+    Admins can delete any document.
     """
     user_id = current_user.get("user_id")
 
     document = document_service.get_document(db, document_id)
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    # Check authorization: user must own the document or be admin
+    is_admin = current_user.get("role") == "admin"
+    is_owner = document.user_id == user_id
+    
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to delete this document"
+        )
 
     document_service.delete_document(db, document_id)
     file_storage_service.delete(document_id)
@@ -412,13 +428,14 @@ async def delete_document(
         user_id=user_id,
         resource_id=document_id,
         action="delete",
-        details={"admin_action": True},
+        details={"admin_action": is_admin},
         status="success"
     )
     
-    logger.info(f"Admin {user_id} deleted document {document_id}")
+    logger.info(f"User {user_id} deleted document {document_id}")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 
 # Note: Authentication endpoints have been moved to auth.py router
 # Use /auth/register, /auth/login, /auth/refresh, /auth/me for authentication

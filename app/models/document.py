@@ -9,13 +9,11 @@ from .base import Base
 
 
 class DocumentStatus(str, Enum):
-    """Document processing status."""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    PROCESSED = "processed"
-    FAILED = "failed"
+    """Document status."""
     PAID = "paid"
+    UNPAID = "unpaid"
     ARCHIVED = "archived"
+    UNARCHIVED = "unarchived"
     SAVED = "saved"
 
 

@@ -1,4 +1,4 @@
-export type DocumentStatus = 'pending' | 'processing' | 'processed' | 'failed' | 'paid' | 'archived' | 'saved';
+export type DocumentStatus = 'paid' | 'unpaid' | 'archived' | 'unarchived' | 'saved';
 
 export interface DocumentItem {
   id: string;

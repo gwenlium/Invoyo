@@ -146,9 +146,9 @@ class DocumentService:
         document.confidence_score = confidence_score
         document.error_message = error_message
         
-        if status == DocumentStatus.PROCESSED:
-            from datetime import datetime
-            document.processed_at = datetime.utcnow()
+        # Always update processed_at when processing extraction
+        from datetime import datetime
+        document.processed_at = datetime.utcnow()
         
         db.commit()
         db.refresh(document)
@@ -214,7 +214,7 @@ class FileStorageService:
         return None
 
     def delete(self, file_id: str) -> bool:
-        """Remove stored file if it exists."""
+        """Delete file from storage."""
         file_path = self.storage_dir / file_id
         if file_path.exists():
             try:
@@ -223,15 +223,6 @@ class FileStorageService:
                 return True
             except Exception as exc:
                 logger.warning(f"Failed to delete file {file_id}: {exc}")
-        return False
-    
-    def delete(self, file_id: str) -> bool:
-        """Delete file from storage."""
-        file_path = self.storage_dir / file_id
-        if file_path.exists():
-            os.remove(file_path)
-            logger.info(f"Deleted file: {file_id}")
-            return True
         return False
 
 # Instantiate services
@@ -249,7 +240,7 @@ async def process_document_logic(
     Main processing logic:
     1. Extract text using OCR
     2. Update document in database
-    3. For 'saved' status documents, keep them in 'saved' state (user decides when to mark as paid/unpaid)
+    3. Keep document in 'saved' status (user decides when to mark as paid/unpaid/archived/unarchived)
     4. Handle errors gracefully
     """
     try:
@@ -261,11 +252,11 @@ async def process_document_logic(
         # Extract text
         extraction_result = await ocr_service.extract_text(file_content, content_type)
         
-        # If document is in 'saved' status, keep it there and just update the extracted data
-        # Otherwise update to PROCESSED as normal
-        new_status = current_doc.status if current_doc.status == DocumentStatus.SAVED else DocumentStatus.PROCESSED
+        # Keep document in 'saved' status - extraction updates the data but doesn't change status
+        # Status can only be changed to paid/unpaid/archived/unarchived by user action
+        new_status = DocumentStatus.SAVED
         
-        # Update database
+        # Update database with extracted content
         document_service.update_document_processing(
             db,
             file_id,
@@ -276,17 +267,16 @@ async def process_document_logic(
             confidence_score=extraction_result["confidence_score"]
         )
         
-        logger.info(f"Successfully processed document: {file_id} (status: {new_status})")
+        logger.info(f"Successfully processed document: {file_id} (extracted text: {len(extraction_result['extracted_text'])} chars, QR codes: {extraction_result['qr_code_data']}))")
         return extraction_result
         
     except Exception as e:
         logger.error(f"Processing failed for {file_id}: {e}", exc_info=True)
-        # Update document with error
+        # Keep document in 'saved' status but record the error
         document_service.update_document_processing(
             db,
             file_id,
-            DocumentStatus.FAILED,
+            DocumentStatus.SAVED,
             error_message=str(e)
         )
         raise
-        return {"success": False, "error": str(e)}

@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     
+    # Admin Management
+    # Comma-separated list of emails to automatically promote to admin on registration
+    # Example: "admin@example.com,superuser@example.com"
+    admin_emails: str = ""
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

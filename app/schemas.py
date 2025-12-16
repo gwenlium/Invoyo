@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, EmailStr, validator
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
+from .models import DocumentStatus
 
 # =====================
 # AUTHENTICATION SCHEMAS
@@ -51,7 +52,7 @@ class UserResponse(BaseModel):
     id: str
     email: str
     username: str
-    role: UserRole
+    role: str  # Changed from UserRole to str for proper JSON serialization
     is_active: bool
     created_at: datetime
     last_login: Optional[datetime] = None
@@ -62,16 +63,6 @@ class UserResponse(BaseModel):
 # =====================
 # DOCUMENT SCHEMAS
 # =====================
-
-class DocumentStatus(str, Enum):
-    """Document processing status."""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    PROCESSED = "processed"
-    FAILED = "failed"
-    PAID = "paid"
-    ARCHIVED = "archived"
-    SAVED = "saved"
 
 class DocumentResponse(BaseModel):
     """API response for document metadata and extraction."""

@@ -65,6 +65,5 @@ def derive_paid_status(text: str | None, status: str) -> str:
         lower = text.lower()
         if "bezahlt" in lower or "paid" in lower:
             return "Paid"
-    if status == "processed":
-        return "Unpaid"
-    return "Pending"
+    # Default to unpaid for all document statuses
+    return "Unpaid"

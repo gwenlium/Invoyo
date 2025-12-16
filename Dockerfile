@@ -16,11 +16,20 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
 # 5. Copy Application Code
 COPY ./app /code/app
+COPY ./tests /code/tests
 
-# 6. Security: Run as non-root user (Best Practice)
+# 6. Create directories with proper permissions
+RUN mkdir -p /code/app/data/storage && \
+    chmod 755 /code/app/data && \
+    chmod 755 /code/app/data/storage
+
+# 7. Security: Run as non-root user (Best Practice)
 RUN adduser --disabled-password --gecos "" appuser
+
+# 8. Fix directory ownership
+RUN chown -R appuser:appuser /code/app/data
 USER appuser
 
-# 7. Start the App
+# 9. Start the App
 # We use host 0.0.0.0 to make it accessible outside the container
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
