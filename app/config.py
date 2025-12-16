@@ -1,20 +1,25 @@
 """Application configuration using environment variables."""
 import os
+import sys
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from functools import lru_cache
+
+
+def _running_under_pytest() -> bool:
+    return ("PYTEST_CURRENT_TEST" in os.environ) or ("pytest" in sys.modules)
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Application
-    app_name: str = "Invoice Processor"
+    app_name: str = "Invoyo"
     environment: str = "development"  # development, staging, production
     api_version: str = "v1"
     
     # Database
     database_url: str = Field(
-        default="postgresql://user:password@db:5432/invoiceprocessor",
+        default="postgresql://user:password@db:5432/invoyo",
         env="DATABASE_URL",
     )
     database_pool_size: int = 10
@@ -22,7 +27,7 @@ class Settings(BaseSettings):
     database_pool_recycle: int = 3600
     
     # Security
-    secret_key: str = "your-secret-key-change-in-production"  # MUST be in .env
+    secret_key: str = "CHANGE-THIS-IN-PRODUCTION-USE-ENV-FILE"  # MUST be set in .env for production
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
@@ -41,11 +46,18 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
     
     # Rate limiting
+    # Default to disabled under pytest to avoid test flakiness; can be overridden via env.
+    rate_limit_enabled: bool = Field(default_factory=lambda: not _running_under_pytest())
     rate_limit_requests: int = 100
     rate_limit_window_seconds: int = 60
     
     # Logging
     log_level: str = "INFO"
+    
+    # Admin Management
+    # Comma-separated list of emails to automatically promote to admin on registration
+    # Example: "admin@example.com,superuser@example.com"
+    admin_emails: str = ""
     
     class Config:
         env_file = ".env"

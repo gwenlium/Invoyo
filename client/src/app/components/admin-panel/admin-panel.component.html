@@ -1,0 +1,88 @@
+<div class="admin-container">
+  <div class="admin-header">
+    <h1>Admin Panel</h1>
+    <button class="ghost small" (click)="goBack()">← Back</button>
+  </div>
+
+  <div class="admin-content">
+    <section class="users-section">
+      <h2>User Management</h2>
+      
+      <div *ngIf="loading()" class="loading">Loading users...</div>
+      <div *ngIf="error()" class="error">{{ error() }}</div>
+      
+      <div *ngIf="!loading() && users().length" class="users-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Current Role</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let user of users()" [class.is-admin]="user.role === 'admin'">
+              <td>{{ user.username }}</td>
+              <td>{{ user.email }}</td>
+              <td>
+                <span [class]="'role-badge role-' + user.role">
+                  {{ user.role | uppercase }}
+                </span>
+              </td>
+              <td>
+                <span [class]="user.is_active ? 'status-active' : 'status-inactive'">
+                  {{ user.is_active ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="actions">
+                <button 
+                  *ngIf="user.role === 'user'" 
+                  class="primary small"
+                  (click)="promoteToAdmin(user)"
+                  [disabled]="actionInProgress()">
+                  Promote to Admin
+                </button>
+                <div *ngIf="user.role === 'admin' && !isLastAdmin(user)" class="demote-action">
+                  <button 
+                    *ngIf="confirmingDemoteUserId() !== user.id"
+                    class="secondary small"
+                    (click)="confirmingDemoteUserId.set(user.id)"
+                    [disabled]="actionInProgress()">
+                    Demote to User
+                  </button>
+                  <div *ngIf="confirmingDemoteUserId() === user.id" class="demote-confirm-inline">
+                    <span class="demote-confirm-text">Demote this user?</span>
+                    <button class="danger small" (click)="demoteFromAdmin(user)">Yes</button>
+                    <button class="secondary small" (click)="confirmingDemoteUserId.set(null)">No</button>
+                  </div>
+                </div>
+                <span *ngIf="user.role === 'admin' && isLastAdmin(user)" class="info-text">
+                  Last Admin
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div *ngIf="!loading() && users().length === 0" class="empty-state">
+        No users found.
+      </div>
+    </section>
+  </div>
+
+  <div class="toast-container">
+    <div
+      *ngFor="let toast of toasts()"
+      class="toast"
+      [class.leaving]="toast.leaving"
+      [style.background-color]="toast.background"
+      [style.color]="toast.color"
+    >
+      <span>{{ toast.message }}</span>
+      <button type="button" class="toast-close" (click)="dismissToast(toast.id, $event)" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+</div>

@@ -1,10 +1,13 @@
+name: invoyo
+
 services:
   # Web API
   web:
+    image: invoyo-api-image
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: invoiceprocessor-api
+    container_name: invoyo-api
     ports:
       - "8000:8000"
     environment:
@@ -29,9 +32,9 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    container_name: invoiceprocessor-db
+    container_name: invoyo-db
     environment:
-      POSTGRES_DB: invoiceprocessor
+      POSTGRES_DB: invoyo
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     volumes:
@@ -40,7 +43,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d invoiceprocessor"]
+      test: ["CMD-SHELL", "pg_isready -U user -d invoyo"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -48,7 +51,7 @@ services:
   # Redis - for caching and task queues
   redis:
     image: redis:7-alpine
-    container_name: invoiceprocessor-redis
+    container_name: invoyo-redis
     restart: unless-stopped
     networks:
       - app-network
@@ -59,10 +62,11 @@ services:
       retries: 5
 
   client:
+    image: invoyo-client-image
     build:
       context: ./client
       dockerfile: Dockerfile
-    container_name: invoiceprocessor-client
+    container_name: invoyo-client
     ports:
       - "80:80"
     depends_on:

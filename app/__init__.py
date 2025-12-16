@@ -1,4 +1,4 @@
-"""Invoice Processor application package.
+"""Invoyo application package.
 
 Exposes the FastAPI `app` instance defined in `main.py` and provides a
 `create_app` factory for compatibility with ASGI servers or tooling that

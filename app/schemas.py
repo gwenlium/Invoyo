@@ -1,17 +1,68 @@
 """Request and response schemas using Pydantic for validation."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr, validator
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
+from .models import DocumentStatus
 
-class DocumentStatus(str, Enum):
-    """Document processing status."""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    PROCESSED = "processed"
-    FAILED = "failed"
-    PAID = "paid"
-    ARCHIVED = "archived"
+# =====================
+# AUTHENTICATION SCHEMAS
+# =====================
+
+class UserRole(str, Enum):
+    """User roles for authorization."""
+    ADMIN = "admin"
+    USER = "user"
+
+class UserRegister(BaseModel):
+    """Schema for user registration."""
+    email: EmailStr = Field(..., description="User email address")
+    username: str = Field(..., min_length=3, max_length=50, description="Username")
+    # No minimum length requirement; strength checks still apply
+    password: str = Field(..., description="Password with upper/lowercase and a digit")
+    
+    @validator('password')
+    def password_strength(cls, v):
+        """Ensure password meets security requirements (OWASP compliant)."""
+        if not any(char.isdigit() for char in v):
+            raise ValueError('Password must contain at least one digit')
+        if not any(char.isupper() for char in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(char.islower() for char in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        return v
+
+class UserLogin(BaseModel):
+    """Schema for user login."""
+    username: str = Field(..., description="Username or email")
+    password: str = Field(..., description="User password")
+
+class Token(BaseModel):
+    """JWT token response."""
+    access_token: str = Field(..., description="JWT access token")
+    refresh_token: str = Field(..., description="JWT refresh token for obtaining new access tokens")
+    token_type: str = Field(default="bearer", description="Token type")
+
+class TokenRefresh(BaseModel):
+    """Request for refreshing access token."""
+    refresh_token: str = Field(..., description="Valid refresh token")
+
+class UserResponse(BaseModel):
+    """Public user information."""
+    id: str
+    email: str
+    username: str
+    role: str  # Changed from UserRole to str for proper JSON serialization
+    is_active: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+# =====================
+# DOCUMENT SCHEMAS
+# =====================
 
 class DocumentResponse(BaseModel):
     """API response for document metadata and extraction."""

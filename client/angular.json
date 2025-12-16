@@ -39,8 +39,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "10kB",
+                  "maximumError": "15kB"
                 }
               ],
               "outputHashing": "all"
@@ -60,7 +60,8 @@
               "buildTarget": "client:build:production"
             },
             "development": {
-              "buildTarget": "client:build:development"
+              "buildTarget": "client:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

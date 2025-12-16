@@ -1,9 +1,12 @@
+name: invoyo-dev
+
 services:
   web:
+    image: invoyo-api-dev-image
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: invoiceprocessor-api-dev
+    container_name: invoyo-api-dev
     ports:
       - "8000:8000"
     env_file:
@@ -15,12 +18,23 @@ services:
       - ./app:/home/app/app
     networks:
       - app-network
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /home/app/app
+          ignore:
+            - __pycache__
+            - "*.pyc"
+            - .pytest_cache
+        - action: rebuild
+          path: ./requirements.txt
 
   db:
     image: postgres:15-alpine
-    container_name: invoiceprocessor-db-dev
+    container_name: invoyo-db-dev
     environment:
-      POSTGRES_DB: invoiceprocessor
+      POSTGRES_DB: invoyo
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     ports:
@@ -32,17 +46,18 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: invoiceprocessor-redis-dev
+    container_name: invoyo-redis-dev
     ports:
       - "6379:6379"
     networks:
       - app-network
 
   client:
+    image: invoyo-client-dev-image
     build:
       context: ./client
       dockerfile: Dockerfile.dev
-    container_name: invoiceprocessor-client-dev
+    container_name: invoyo-client-dev
     ports:
       - "4200:4200"
     volumes:
@@ -51,6 +66,13 @@ services:
       - /app/.angular
     networks:
       - app-network
+    develop:
+      watch:
+        - action: sync
+          path: ./client/src
+          target: /app/src
+        - action: rebuild
+          path: ./client/package.json
 
 networks:
   app-network:
