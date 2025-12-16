@@ -9,6 +9,7 @@ on:
 jobs:
   # Backend Python tests
   backend-test:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     
     services:

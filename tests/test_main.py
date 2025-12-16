@@ -219,3 +219,11 @@ def test_document_persistence(auth_headers):
     get_response = client.get(f"/documents/{doc_id}", headers=auth_headers)
     assert get_response.status_code == 200
     assert get_response.json()["filename"] == "persistent.pdf"
+
+
+def teardown_module(module=None):
+    """Ensure TestClient is closed to avoid hanging test sessions."""
+    try:
+        client.close()
+    except Exception:
+        pass

@@ -341,3 +341,11 @@ class TestInputValidation:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def teardown_module(module=None):
+    """Ensure TestClient is closed to avoid hanging test sessions."""
+    try:
+        client.close()
+    except Exception:
+        pass
