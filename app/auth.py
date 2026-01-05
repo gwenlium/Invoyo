@@ -48,12 +48,13 @@ else:
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/hour")  # Strict limit on registration to prevent spam
+# @limiter.limit("5/hour")  # Strict limit on registration to prevent spam
 async def register_user(
     request: Request,
     user_data: UserRegister,
     db: Session = Depends(get_db)
 ):
+    logger.info(f"Registering user: {user_data.username}")
     """
     Register a new user account.
     
@@ -130,7 +131,7 @@ async def register_user(
 
 
 @router.post("/login", response_model=Token)
-@limiter.limit("10/minute")  # Prevent brute force login attempts
+# @limiter.limit("10/minute")  # Prevent brute force login attempts
 async def login(
     request: Request,
     login_data: UserLogin,

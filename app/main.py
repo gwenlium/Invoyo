@@ -2,6 +2,7 @@
 import logging
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -22,6 +23,17 @@ app = FastAPI(
     title="Invoyo API",
     version="1.0.0",
     description="Store, parse, and track invoices with OCR extraction"
+)
+
+# =====================
+# CORS
+# =====================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # =====================
@@ -124,5 +136,5 @@ async def startup_event():
 # ROUTERS
 # =====================
 app.include_router(health.router)
-app.include_router(documents.router)
-app.include_router(auth.router)
+app.include_router(documents.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
