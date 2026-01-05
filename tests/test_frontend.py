@@ -84,7 +84,7 @@ def regular_user(test_db):
 def admin_token(admin_user):
     """Get auth token for admin user."""
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": "admin", "password": "Admin123!"}
     )
     assert response.status_code == 200
@@ -95,7 +95,7 @@ def admin_token(admin_user):
 def user_token(regular_user):
     """Get auth token for regular user."""
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": "user", "password": "User123!"}
     )
     assert response.status_code == 200
@@ -112,7 +112,7 @@ class TestAuthPages:
     def test_register_page_submission(self, test_db):
         """Test submitting the register form."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "newuser@test.com",
                 "username": "newuser",
@@ -130,7 +130,7 @@ class TestAuthPages:
     def test_login_page_submission(self, admin_user):
         """Test submitting the login form."""
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin", "password": "Admin123!"}
         )
         assert response.status_code == 200
@@ -142,7 +142,7 @@ class TestAuthPages:
     def test_login_with_email(self, admin_user):
         """Test login using email instead of username."""
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin@test.com", "password": "Admin123!"}
         )
         assert response.status_code == 200
@@ -151,7 +151,7 @@ class TestAuthPages:
     def test_invalid_login_shows_error(self, admin_user):
         """Test that invalid login returns proper error."""
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin", "password": "WrongPassword!"}
         )
         assert response.status_code == 401
@@ -164,7 +164,7 @@ class TestAdminPanel:
     def test_admin_panel_list_users(self, admin_token):
         """Test admin panel can fetch and display user list."""
         response = client.get(
-            "/auth/admin/users",
+            "/api/auth/admin/users",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -184,7 +184,7 @@ class TestAdminPanel:
         """Test promoting a user to admin from the admin panel."""
         # Verify user is currently regular
         list_response = client.get(
-            "/auth/admin/users",
+            "/api/auth/admin/users",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         users = list_response.json()
@@ -194,7 +194,7 @@ class TestAdminPanel:
         
         # Promote the user
         promote_response = client.post(
-            f"/auth/admin/promote/{regular_user.id}",
+            f"/api/auth/admin/promote/{regular_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert promote_response.status_code == 200
@@ -205,13 +205,13 @@ class TestAdminPanel:
         """Test demoting an admin user from the admin panel."""
         # First promote the user
         client.post(
-            f"/auth/admin/promote/{regular_user.id}",
+            f"/api/auth/admin/promote/{regular_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         
         # Then demote them
         demote_response = client.post(
-            f"/auth/admin/demote/{regular_user.id}",
+            f"/api/auth/admin/demote/{regular_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert demote_response.status_code == 200
@@ -221,7 +221,7 @@ class TestAdminPanel:
     def test_non_admin_cannot_access_admin_panel(self, user_token):
         """Test that regular users cannot access admin endpoints."""
         response = client.get(
-            "/auth/admin/users",
+            "/api/auth/admin/users",
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
@@ -234,7 +234,7 @@ class TestDocumentListComponent:
     def test_get_document_list(self, user_token):
         """Test fetching document list (empty initially)."""
         response = client.get(
-            "/documents/",
+            "/api/documents/",
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
@@ -245,13 +245,13 @@ class TestDocumentListComponent:
     
     def test_get_document_list_requires_auth(self, test_db):
         """Test that document list requires authentication."""
-        response = client.get("/documents/")
+        response = client.get("/api/documents/")
         assert response.status_code == 403  # Forbidden without auth
     
     def test_get_document_detail(self, admin_token):
         """Test fetching a specific document (404 if not found)."""
         response = client.get(
-            "/documents/nonexistent-id",
+            "/api/documents/nonexistent-id",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         # Should be 404 since document doesn't exist
@@ -264,7 +264,7 @@ class TestHeaderComponent:
     def test_get_current_user_info(self, admin_token):
         """Test fetching current user info for header display."""
         response = client.get(
-            "/auth/me",
+            "/api/auth/me",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -279,7 +279,7 @@ class TestHeaderComponent:
         # After logout, the frontend would discard the token
         # Test that a bad token is rejected
         response = client.get(
-            "/auth/me",
+            "/api/auth/me",
             headers={"Authorization": "Bearer invalid-token"}
         )
         assert response.status_code == 401
@@ -291,7 +291,7 @@ class TestToastNotifications:
     def test_successful_registration_response(self, test_db):
         """Test that successful registration returns expected response for toast."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "success@test.com",
                 "username": "successuser",
@@ -306,7 +306,7 @@ class TestToastNotifications:
     def test_error_response_for_failed_operation(self, admin_user):
         """Test that failed operations return proper error for toast display."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "admin@test.com",  # Duplicate
                 "username": "different",
@@ -320,7 +320,7 @@ class TestToastNotifications:
     def test_promotion_success_response(self, admin_token, regular_user):
         """Test promotion returns data for success toast."""
         response = client.post(
-            f"/auth/admin/promote/{regular_user.id}",
+            f"/api/auth/admin/promote/{regular_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -331,7 +331,7 @@ class TestToastNotifications:
     def test_demotion_prevented_response(self, admin_token, admin_user):
         """Test that demotion prevention returns proper error for toast."""
         response = client.post(
-            f"/auth/admin/demote/{admin_user.id}",
+            f"/api/auth/admin/demote/{admin_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 400
@@ -345,7 +345,7 @@ class TestResponseFormats:
     def test_user_response_structure(self, admin_user, admin_token):
         """Test that user responses have expected structure."""
         response = client.get(
-            "/auth/me",
+            "/api/auth/me",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -367,7 +367,7 @@ class TestResponseFormats:
     def test_token_response_structure(self, admin_user):
         """Test that login response has expected structure."""
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin", "password": "Admin123!"}
         )
         assert response.status_code == 200
@@ -382,7 +382,7 @@ class TestResponseFormats:
     def test_error_response_structure(self, test_db):
         """Test that error responses have consistent structure."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "invalid-email",
                 "username": "test",
@@ -401,13 +401,13 @@ class TestAuthGuardAndRouting:
     
     def test_protected_route_redirects_unauthenticated(self, test_db):
         """Test that protected routes require authentication."""
-        response = client.get("/documents/")
+        response = client.get("/api/documents/")
         assert response.status_code == 403
     
     def test_admin_route_rejects_regular_user(self, user_token):
         """Test that admin routes reject non-admin users."""
         response = client.get(
-            "/auth/admin/users",
+            "/api/auth/admin/users",
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
@@ -416,14 +416,14 @@ class TestAuthGuardAndRouting:
         """Test that token refresh works (extends session)."""
         # Login to get tokens
         login_response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin", "password": "Admin123!"}
         )
         refresh_token = login_response.json()["refresh_token"]
         
         # Refresh should return new access token
         refresh_response = client.post(
-            "/auth/refresh",
+            "/api/auth/refresh",
             json={"refresh_token": refresh_token}
         )
         assert refresh_response.status_code == 200
@@ -431,7 +431,7 @@ class TestAuthGuardAndRouting:
         
         # New token should work
         me_response = client.get(
-            "/auth/me",
+            "/api/auth/me",
             headers={"Authorization": f"Bearer {new_token}"}
         )
         assert me_response.status_code == 200

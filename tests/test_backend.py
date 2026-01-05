@@ -85,7 +85,7 @@ def regular_user(test_db):
 def admin_token(admin_user):
     """Get auth token for admin user."""
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": "admin", "password": "Admin123!"}
     )
     assert response.status_code == 200
@@ -96,7 +96,7 @@ def admin_token(admin_user):
 def user_token(regular_user):
     """Get auth token for regular user."""
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"username": "user", "password": "User123!"}
     )
     assert response.status_code == 200
@@ -113,7 +113,7 @@ class TestAuthentication:
     def test_register_first_user_is_admin(self, test_db):
         """First registered user should automatically be admin."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "first@test.com",
                 "username": "firstuser",
@@ -128,7 +128,7 @@ class TestAuthentication:
     def test_register_subsequent_users_are_regular(self, admin_user):
         """Subsequent users should have regular user role."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "second@test.com",
                 "username": "seconduser",
@@ -142,7 +142,7 @@ class TestAuthentication:
     def test_register_duplicate_email_fails(self, admin_user):
         """Cannot register with duplicate email."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "admin@test.com",  # Already exists
                 "username": "different",
@@ -155,7 +155,7 @@ class TestAuthentication:
     def test_register_weak_password_fails(self, test_db):
         """Password must meet strength requirements."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "weak@test.com",
                 "username": "weakpass",
@@ -167,7 +167,7 @@ class TestAuthentication:
     def test_login_success(self, admin_user):
         """Valid credentials should return access and refresh tokens."""
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin", "password": "Admin123!"}
         )
         assert response.status_code == 200
@@ -179,7 +179,7 @@ class TestAuthentication:
     def test_login_wrong_password_fails(self, admin_user):
         """Wrong password should fail."""
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin", "password": "WrongPassword!"}
         )
         assert response.status_code == 401
@@ -188,7 +188,7 @@ class TestAuthentication:
     def test_login_nonexistent_user_fails(self, test_db):
         """Login with nonexistent user should fail."""
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "ghost", "password": "Ghost123!"}
         )
         assert response.status_code == 401
@@ -197,14 +197,14 @@ class TestAuthentication:
         """Refresh token should generate new access token."""
         # Login first
         login_response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "admin", "password": "Admin123!"}
         )
         refresh_token = login_response.json()["refresh_token"]
         
         # Use refresh token
         response = client.post(
-            "/auth/refresh",
+            "/api/auth/refresh",
             json={"refresh_token": refresh_token}
         )
         assert response.status_code == 200
@@ -215,7 +215,7 @@ class TestAuthentication:
     def test_get_current_user(self, admin_token):
         """Authenticated user should be able to get their info."""
         response = client.get(
-            "/auth/me",
+            "/api/auth/me",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -233,13 +233,13 @@ class TestAuthorization:
     
     def test_protected_endpoint_requires_auth(self, test_db):
         """Accessing protected endpoint without token should fail."""
-        response = client.get("/documents/")
+        response = client.get("/api/documents/")
         assert response.status_code == 403  # No credentials
     
     def test_regular_user_cannot_delete(self, user_token):
         """Regular users should not be able to delete documents."""
         response = client.delete(
-            "/documents/fake-id",
+            "/api/documents/fake-id",
             headers={"Authorization": f"Bearer {user_token}"}
         )
         # Should be 403 (forbidden) if authorization is checked before existence
@@ -251,7 +251,7 @@ class TestAuthorization:
         # This will fail with 404 (doc doesn't exist), but we verify
         # authorization passes (not 403)
         response = client.delete(
-            "/documents/fake-id",
+            "/api/documents/fake-id",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         # Should get 404 (not found), not 403 (forbidden)
@@ -268,7 +268,7 @@ class TestAPISecurity:
     def test_invalid_token_rejected(self, test_db):
         """Invalid JWT tokens should be rejected."""
         response = client.get(
-            "/documents/",
+            "/api/documents/",
             headers={"Authorization": "Bearer invalid_token_here"}
         )
         assert response.status_code == 401
@@ -298,7 +298,7 @@ class TestAPISecurity:
         responses = []
         for i in range(12):  # Exceed 10/minute limit
             response = client.post(
-                "/auth/register",
+                "/api/auth/register",
                 json={
                     "email": f"ratelimit{i}@test.com",
                     "username": f"ratelimit{i}",
@@ -321,7 +321,7 @@ class TestInputValidation:
     def test_invalid_email_rejected(self, test_db):
         """Invalid email format should be rejected."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "not-an-email",
                 "username": "user",
@@ -333,7 +333,7 @@ class TestInputValidation:
     def test_username_too_short_rejected(self, test_db):
         """Username that's too short should be rejected."""
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "test@test.com",
                 "username": "ab",  # Min is 3
@@ -347,7 +347,7 @@ class TestInputValidation:
         # Try SQL injection in document ID
         malicious_id = "'; DROP TABLE users; --"
         response = client.get(
-            f"/documents/{malicious_id}",
+            f"/api/documents/{malicious_id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         # Should return 404, not crash
@@ -364,7 +364,7 @@ class TestAdminManagement:
     def test_promote_user_to_admin(self, admin_token, regular_user):
         """Admin should be able to promote a regular user to admin."""
         response = client.post(
-            f"/auth/admin/promote/{regular_user.id}",
+            f"/api/auth/admin/promote/{regular_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -376,13 +376,13 @@ class TestAdminManagement:
         """Admin should be able to demote another admin to regular user."""
         # First promote the user
         client.post(
-            f"/auth/admin/promote/{regular_user.id}",
+            f"/api/auth/admin/promote/{regular_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         
         # Then demote them
         response = client.post(
-            f"/auth/admin/demote/{regular_user.id}",
+            f"/api/auth/admin/demote/{regular_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -392,7 +392,7 @@ class TestAdminManagement:
     def test_prevent_demoting_last_admin(self, admin_token, admin_user):
         """Should not allow demoting the last remaining admin."""
         response = client.post(
-            f"/auth/admin/demote/{admin_user.id}",
+            f"/api/auth/admin/demote/{admin_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 400
@@ -401,7 +401,7 @@ class TestAdminManagement:
     def test_regular_user_cannot_promote(self, user_token, regular_user):
         """Regular users should not be able to promote others."""
         response = client.post(
-            f"/auth/admin/promote/{regular_user.id}",
+            f"/api/auth/admin/promote/{regular_user.id}",
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
@@ -411,7 +411,7 @@ class TestAdminManagement:
         """Only admins should be able to list all users."""
         # Admin should succeed
         response = client.get(
-            "/auth/admin/users",
+            "/api/auth/admin/users",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
@@ -419,7 +419,7 @@ class TestAdminManagement:
         
         # Regular user should fail
         response = client.get(
-            "/auth/admin/users",
+            "/api/auth/admin/users",
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
@@ -446,7 +446,7 @@ class TestAdminEmailConfiguration:
         get_settings.cache_clear()
         
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "special@test.com",
                 "username": "specialuser",
@@ -471,7 +471,7 @@ class TestAdminEmailConfiguration:
         
         # First register the special email
         response1 = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "special@test.com",
                 "username": "specialuser",
@@ -482,7 +482,7 @@ class TestAdminEmailConfiguration:
         
         # Then register a non-special email
         response = client.post(
-            "/auth/register",
+            "/api/auth/register",
             json={
                 "email": "regular@test.com",
                 "username": "regularuser",

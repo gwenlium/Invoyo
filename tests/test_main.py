@@ -69,7 +69,7 @@ def test_login(client):
 def test_upload_without_auth(client):
     """Test that endpoints require authentication."""
     response = client.post(
-        "/documents/",
+        "/api/documents/",
         files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")}
     )
     assert response.status_code == 403  # Forbidden without auth
@@ -129,7 +129,7 @@ def test_upload_pdf(client, auth_headers, test_db):
     )
 
     response = client.post(
-        "/documents/",
+        "/api/documents/",
         files={"file": ("sample.pdf", minimal_pdf, "application/pdf")},
         headers=auth_headers,
     )
@@ -144,7 +144,7 @@ def test_upload_pdf(client, auth_headers, test_db):
 def test_upload_invalid_file_type(client, auth_headers):
     """Test that non-PDF files are rejected."""
     response = client.post(
-        "/documents/",
+        "/api/documents/",
         files={"file": ("test.txt", b"text content", "text/plain")},
         headers=auth_headers
     )
@@ -155,7 +155,7 @@ def test_upload_file_too_large(client, auth_headers):
     """Test file size validation."""
     large_content = b"x" * (51 * 1024 * 1024)  # 51 MB
     response = client.post(
-        "/documents/",
+        "/api/documents/",
         files={"file": ("large.pdf", large_content, "application/pdf")},
         headers=auth_headers
     )
@@ -170,26 +170,26 @@ def test_get_document(client, auth_headers):
     # First upload
     pdf_content = b"%PDF-1.4\n%test"
     upload_response = client.post(
-        "/documents/",
+        "/api/documents/",
         files={"file": ("test.pdf", pdf_content, "application/pdf")},
         headers=auth_headers
     )
     doc_id = upload_response.json()["id"]
     
     # Then retrieve
-    get_response = client.get(f"/documents/{doc_id}", headers=auth_headers)
+    get_response = client.get(f"/api/documents/{doc_id}", headers=auth_headers)
     assert get_response.status_code == 200
     assert get_response.json()["id"] == doc_id
 
 def test_get_nonexistent_document(client, auth_headers):
     """Test retrieving a non-existent document."""
-    response = client.get("/documents/nonexistent-id", headers=auth_headers)
+    response = client.get("/api/documents/nonexistent-id", headers=auth_headers)
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
 
 def test_list_documents(client, auth_headers):
     """Test listing documents."""
-    response = client.get("/documents/", headers=auth_headers)
+    response = client.get("/api/documents/", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert "items" in data
@@ -214,7 +214,7 @@ def test_rate_limit_on_upload(client, auth_headers):
 
 def test_malformed_request(client, test_db):
     """Test handling of malformed requests."""
-    response = client.post("/auth/login", json={"username": "test"})
+    response = client.post("/api/auth/login", json={"username": "test"})
     # Should handle gracefully (depends on implementation)
     assert response.status_code in [400, 422]
 
@@ -227,14 +227,14 @@ def test_document_persistence(client, auth_headers):
     # Upload document
     pdf_content = b"%PDF-1.4\npersistent"
     upload_response = client.post(
-        "/documents/",
+        "/api/documents/",
         files={"file": ("persistent.pdf", pdf_content, "application/pdf")},
         headers=auth_headers
     )
     doc_id = upload_response.json()["id"]
     
     # Retrieve immediately
-    get_response = client.get(f"/documents/{doc_id}", headers=auth_headers)
+    get_response = client.get(f"/api/documents/{doc_id}", headers=auth_headers)
     assert get_response.status_code == 200
     assert get_response.json()["filename"] == "persistent.pdf"
 
